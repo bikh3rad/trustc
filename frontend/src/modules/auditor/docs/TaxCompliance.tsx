@@ -75,6 +75,7 @@ export function TaxComplianceDoc({ scopeLabel }: { scopeLabel: string }) {
       </DocSection>
 
       <DocSection title="۲. خلاصه گردش وجوه امانی">
+        <div className="responsive-table-card">
         <table
           className="table"
           style={{ background: "transparent", border: "1px solid var(--ink-200)" }}
@@ -108,6 +109,7 @@ export function TaxComplianceDoc({ scopeLabel }: { scopeLabel: string }) {
             </tr>
           </tbody>
         </table>
+        </div>
       </DocSection>
 
       <DocSection title="۳. تأیید حسابرس">

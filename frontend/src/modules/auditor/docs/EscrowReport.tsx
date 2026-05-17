@@ -56,12 +56,12 @@ export function EscrowReportDoc({
         </div>
       </dl>
 
+      <div className="responsive-table-card" style={{ marginTop: 16 }}>
       <table
         className="table"
         style={{
           background: "transparent",
           border: "1px solid var(--ink-200)",
-          marginTop: 16,
         }}
       >
         <thead>
@@ -90,6 +90,7 @@ export function EscrowReportDoc({
           )}
         </tbody>
       </table>
+      </div>
       <div
         style={{
           borderTop: "2px solid var(--ink-900)",

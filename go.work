@@ -9,4 +9,6 @@ use (
 	./services/ledger
 	./services/audit
 	./services/governance
+	./services/auth
+	./services/admin
 )

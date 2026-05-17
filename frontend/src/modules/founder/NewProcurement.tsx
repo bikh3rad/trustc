@@ -131,7 +131,7 @@ export function NewProcurement() {
       </header>
 
       <div className="card">
-        <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", gap: "var(--s-5)" }}>
+        <div className="grid form-row-2" style={{ gridTemplateColumns: "1fr 1fr", gap: "var(--s-5)" }}>
           <FormField label="عنوان درخواست" required error={errors.title}>
             <input
               className="input"

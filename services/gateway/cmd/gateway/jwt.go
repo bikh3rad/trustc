@@ -1,21 +1,16 @@
 package main
 
 import (
-	"time"
-
-	"github.com/golang-jwt/jwt/v5"
+	"github.com/trustc/trustc/services/shared/authtoken"
 )
 
+// jwtIssue mints a developer JWT compatible with the gateway's JWTAuth +
+// the shared authtoken parser. Used by /auth/dev-token and any local tooling
+// that needs a token without going through /v1/auth/login.
 func jwtIssue(secret []byte, sub, role string) string {
-	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub":  sub,
-		"role": role,
-		"iat":  time.Now().Unix(),
-		"exp":  time.Now().Add(24 * time.Hour).Unix(),
-	})
-	s, err := tok.SignedString(secret)
+	tok, err := authtoken.Issue(secret, sub, role, "ACTIVE", "", "", 0)
 	if err != nil {
 		return ""
 	}
-	return s
+	return tok
 }

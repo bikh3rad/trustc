@@ -11,8 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
-
+	"github.com/trustc/trustc/services/shared/authtoken"
 	"github.com/trustc/trustc/services/shared/errs"
 	"github.com/trustc/trustc/services/shared/ids"
 	"github.com/trustc/trustc/services/shared/logx"
@@ -22,6 +21,17 @@ const (
 	HeaderRequestID     = "X-Request-Id"
 	HeaderIdempotency   = "Idempotency-Key"
 	HeaderAuthorization = "Authorization"
+
+	// Identity headers the gateway forwards to downstream services after JWT
+	// verification, so they don't re-verify the token themselves but still
+	// know who is making the call. Set by JWTAuth; trusted only inside the
+	// cluster (do NOT accept these from external clients — the gateway is
+	// the only ingress).
+	HeaderActorID      = "X-Trustc-User"
+	HeaderActorRole    = "X-Trustc-Role"
+	HeaderActorStatus  = "X-Trustc-Status"
+	HeaderActorStartup = "X-Trustc-Startup"
+	HeaderActorEmail   = "X-Trustc-Email"
 )
 
 // JSON writes v as JSON with the given status, falling back to a generic
@@ -76,7 +86,12 @@ func CORS(next http.Handler) http.Handler {
 }
 
 // JWTAuth verifies a Bearer token signed by the dev HMAC secret in TRUSTC_JWT_SECRET.
-// On success, attaches actor_id + role to context.
+// On success it attaches actor_id, role, status, email, and startup_id to the
+// request context AND forwards them as X-Trustc-* headers so reverse-proxied
+// services can read the same identity without re-verifying the JWT.
+//
+// Tokens whose status != ACTIVE are rejected with 401 — this catches the case
+// where an admin disables a user but the user's JWT is still within its TTL.
 func JWTAuth(secret []byte, optional bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -86,29 +101,115 @@ func JWTAuth(secret []byte, optional bool) func(http.Handler) http.Handler {
 					next.ServeHTTP(w, r)
 					return
 				}
-				Error(w, errs.New(errs.KindUnauthorized, "MISSING_AUTH", "Authorization header required"))
+				Error(w, errs.New(errs.KindUnauthorized, "unauthenticated", "Authorization header required"))
 				return
 			}
 			parts := strings.SplitN(h, " ", 2)
 			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-				Error(w, errs.New(errs.KindUnauthorized, "BAD_AUTH_FORMAT", "expected Bearer token"))
+				Error(w, errs.New(errs.KindUnauthorized, "unauthenticated", "expected Bearer token"))
 				return
 			}
-			tok, err := jwt.Parse(parts[1], func(t *jwt.Token) (any, error) {
-				if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-					return nil, errors.New("unexpected signing method")
-				}
-				return secret, nil
-			})
-			if err != nil || !tok.Valid {
-				Error(w, errs.New(errs.KindUnauthorized, "INVALID_TOKEN", "JWT invalid"))
+			claims, err := authtoken.Parse(secret, parts[1])
+			if err != nil || claims == nil {
+				Error(w, errs.New(errs.KindUnauthorized, "unauthenticated", "JWT invalid"))
 				return
 			}
-			claims, _ := tok.Claims.(jwt.MapClaims)
-			sub, _ := claims["sub"].(string)
-			role, _ := claims["role"].(string)
-			ctx := logx.WithActor(r.Context(), sub, role)
+			if claims.Status != "" && claims.Status != "ACTIVE" {
+				Error(w, errs.New(errs.KindUnauthorized, "unauthenticated", "account is "+claims.Status))
+				return
+			}
+			ctx := logx.WithActorAuth(r.Context(), claims.Subject, claims.Role,
+				claims.Status, claims.StartupID, claims.Email)
+
+			// Stamp the trusted identity headers for downstream services.
+			// We always overwrite — clients are not allowed to set these.
+			r.Header.Set(HeaderActorID, claims.Subject)
+			r.Header.Set(HeaderActorRole, claims.Role)
+			r.Header.Set(HeaderActorStatus, claims.Status)
+			if claims.StartupID != "" {
+				r.Header.Set(HeaderActorStartup, claims.StartupID)
+			} else {
+				r.Header.Del(HeaderActorStartup)
+			}
+			if claims.Email != "" {
+				r.Header.Set(HeaderActorEmail, claims.Email)
+			} else {
+				r.Header.Del(HeaderActorEmail)
+			}
 			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// IdentityFromHeaders extracts the X-Trustc-* identity that the gateway
+// stamped, and lifts it into the request context. Backend services mount
+// this so handler code can use logx.ActorRole(ctx) etc. as before.
+//
+// This is INTRA-CLUSTER ONLY. Never enable this on a service exposed to the
+// public internet — clients could spoof the headers.
+func IdentityFromHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := r.Header.Get(HeaderActorID)
+		role := r.Header.Get(HeaderActorRole)
+		status := r.Header.Get(HeaderActorStatus)
+		startup := r.Header.Get(HeaderActorStartup)
+		email := r.Header.Get(HeaderActorEmail)
+		if id != "" || role != "" {
+			ctx := logx.WithActorAuth(r.Context(), id, role, status, startup, email)
+			r = r.WithContext(ctx)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// RequireRoles returns a middleware that rejects requests whose actor role
+// is not in `allow`. Use it on /v1/admin/* (allow: ADMIN) and other gated
+// endpoints. AUDITOR read-only enforcement uses RequireWriteRoles below.
+func RequireRoles(allow ...string) func(http.Handler) http.Handler {
+	set := make(map[string]struct{}, len(allow))
+	for _, r := range allow {
+		set[r] = struct{}{}
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			role := logx.ActorRole(r.Context())
+			if role == "" {
+				role = r.Header.Get(HeaderActorRole)
+			}
+			if _, ok := set[role]; !ok {
+				Error(w, errs.New(errs.KindForbidden, "forbidden",
+					"role "+role+" not permitted for this resource"))
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// RequireWriteRoles rejects mutating verbs (POST/PUT/PATCH/DELETE) if the
+// actor role is not in `allowWrites`. GET/HEAD/OPTIONS always pass through.
+// This implements AUDITOR's read-only constraint at the gateway layer.
+func RequireWriteRoles(allowWrites ...string) func(http.Handler) http.Handler {
+	set := make(map[string]struct{}, len(allowWrites))
+	for _, r := range allowWrites {
+		set[r] = struct{}{}
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+				next.ServeHTTP(w, r)
+				return
+			}
+			role := logx.ActorRole(r.Context())
+			if role == "" {
+				role = r.Header.Get(HeaderActorRole)
+			}
+			if _, ok := set[role]; !ok {
+				Error(w, errs.New(errs.KindForbidden, "forbidden",
+					"role "+role+" is read-only for this resource"))
+				return
+			}
+			next.ServeHTTP(w, r)
 		})
 	}
 }

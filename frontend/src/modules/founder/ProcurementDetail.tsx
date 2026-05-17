@@ -12,6 +12,7 @@ import { Icon } from "../../components/ui/Icon";
 import { useCurrentStartup } from "../../context/CurrentStartupContext";
 import { useFrozen } from "../../context/FrozenContext";
 import { useToast } from "../../context/ToastContext";
+import { MobileFSMVertical } from "../../layout/mobile/MobileFSMVertical";
 import {
   formatIRR,
   formatIRRPlain,
@@ -21,6 +22,7 @@ import {
   toFaDigits,
 } from "../../lib/format";
 import { NEXT_STATES, PROCUREMENT_STATES, STAMP_LABEL } from "../../lib/fsm";
+import { useIsMobile } from "../../lib/useIsMobile";
 
 function FieldRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
@@ -41,6 +43,7 @@ export function ProcurementDetail() {
   const { toast } = useToast();
   const { isFrozen } = useFrozen();
   const { current } = useCurrentStartup();
+  const isMobile = useIsMobile();
 
   const [proc, setProc] = useState<Procurement | null>(null);
   const [history, setHistory] = useState<WorkflowTransition[]>([]);
@@ -167,7 +170,11 @@ export function ProcurementDetail() {
         </div>
       )}
 
-      <FSM currentState={proc.state} />
+      {isMobile ? (
+        <MobileFSMVertical currentState={proc.state} />
+      ) : (
+        <FSM currentState={proc.state} />
+      )}
 
       <section
         className="grid"
@@ -179,7 +186,7 @@ export function ProcurementDetail() {
               <h3>مشخصات خرید</h3>
             </div>
             <div
-              className="grid"
+              className="grid form-row-2"
               style={{
                 gridTemplateColumns: "1fr 1fr",
                 gap: "var(--s-4) var(--s-6)",

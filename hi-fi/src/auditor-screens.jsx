@@ -34,7 +34,7 @@ function AuditScreen({ ctx }) {
         </p>
       </header>
 
-      <section className="grid" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+      <section className="grid stat-grid">
         <Stat label="کل رویدادها" value={window.tc.toFaDigits(log.length)} unit="مورد" />
         <Stat label="در ۲۴ ساعت اخیر" value={window.tc.toFaDigits(5)} unit="مورد" delta={{ text: "زنجیره معتبر", tone: "up" }} />
         <Stat label="رویدادهای سیستمی"  value={window.tc.toFaDigits(log.filter(l => l.actorRole === "SYSTEM").length)} unit="مورد" />
@@ -51,7 +51,7 @@ function AuditScreen({ ctx }) {
         </div>
       </div>
 
-      <div className="card" style={{ padding: 0 }}>
+      <div className="card responsive-table-card" style={{ padding: 0 }}>
         <table className="table">
           <thead>
             <tr>

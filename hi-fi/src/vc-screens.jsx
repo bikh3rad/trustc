@@ -30,7 +30,7 @@ function PortfolioScreen({ ctx }) {
         </div>
       </header>
 
-      <section className="grid" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+      <section className="grid stat-grid">
         <Stat label="سرمایه تحت مدیریت" value={window.tc.formatIRR(vc.aum, { withUnit: false })} unit="هزار میلیارد ریال" />
         <Stat label="کل اسکرو فعال" value={window.tc.formatIRR(totalEscrow, { withUnit: false })} unit="میلیارد ریال" hint="در ۷ استارتاپ" />
         <Stat label="اعتبار مصرفی" value={window.tc.formatPercent((totalCreditUsed / totalCredit) * 100)} delta={{ text: window.tc.formatIRR(totalCreditUsed) + " از " + window.tc.formatIRR(totalCredit), tone: "" }} />
@@ -188,7 +188,7 @@ function RecyclingScreen({ ctx }) {
         <Btn variant="primary" icon={<Icon.recycle />} onClick={runCycle}>اجرای چرخه بازیافت</Btn>
       </header>
 
-      <section className="grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+      <section className="grid stat-grid stat-grid--3">
         <Stat label="کل در صف"        value={window.tc.formatIRR(totalQueued, { withUnit: false })} unit="میلیارد ریال" />
         <Stat label="چرخه‌های اجراشده" value={window.tc.toFaDigits(cycle)} unit="در این جلسه" />
         <Stat label="ضریب اهرم"        value={window.tc.toFaDigits("۴.۲")} unit="×" delta={{ text: "هدف: ۱۰×", tone: "" }} />

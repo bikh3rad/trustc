@@ -197,7 +197,7 @@ export function Dashboard() {
         />
       </section>
 
-      <section className="grid" style={{ gridTemplateColumns: "2fr 1fr" }}>
+      <section className="grid two-col-shrink">
         <div className="card">
           <div className="card-title">
             <h3>خریدهای فعال در جریان</h3>
@@ -205,6 +205,7 @@ export function Dashboard() {
               مشاهده همه ←
             </Btn>
           </div>
+          <div className="responsive-table-card">
           <table className="table">
             <thead>
               <tr>
@@ -242,6 +243,7 @@ export function Dashboard() {
               )}
             </tbody>
           </table>
+          </div>
         </div>
 
         <div className="card">

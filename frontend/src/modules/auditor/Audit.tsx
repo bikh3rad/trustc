@@ -120,7 +120,7 @@ export function Audit() {
         </div>
       </div>
 
-      <div className="card" style={{ padding: 0 }}>
+      <div className="card responsive-table-card" style={{ padding: 0 }}>
         <table className="table">
           <thead>
             <tr>

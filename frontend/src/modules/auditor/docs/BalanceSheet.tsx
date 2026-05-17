@@ -96,6 +96,7 @@ export function BalanceSheetDoc({ scopeLabel }: { scopeLabel: string }) {
       </DocSection>
 
       <div
+        className="form-row-2"
         style={{
           borderTop: "2px solid var(--ink-900)",
           marginTop: 24,

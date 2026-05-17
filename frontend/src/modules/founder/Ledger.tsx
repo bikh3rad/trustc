@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { Ledger as LedgerApi, type LedgerEntry } from "../../api";
 import { Stat } from "../../components/ui/Stat";
 import { formatIRR, formatIRRPlain, toFaDigits } from "../../lib/format";
+import { useIsMobile } from "../../lib/useIsMobile";
 
 const POLL_MS = 4000;
 
 export function Ledger() {
+  const isMobile = useIsMobile();
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
   const [freshIds, setFreshIds] = useState<Set<string>>(new Set());
   const [err, setErr] = useState<string | null>(null);
@@ -100,46 +102,115 @@ export function Ledger() {
               : "—"}
           </div>
         </div>
-        <div className="ledger-row head">
-          <span>تاریخ</span>
-          <span>شناسه سند</span>
-          <span>شرح</span>
-          <span className="debit">بدهکار</span>
-          <span className="credit">بستانکار</span>
-        </div>
-        {entries.map((e) => (
-          <div
-            key={e.id}
-            className={"ledger-row" + (freshIds.has(e.id) ? " fresh" : "")}
-          >
-            <span className="muted">
-              {toFaDigits(new Date(e.posted_at).toLocaleString("fa-IR"))}
-            </span>
-            <span>
-              <div className="mono" style={{ fontSize: 11 }}>
-                {e.transaction_id}
+        {isMobile ? (
+          <div style={{ padding: "var(--s-4)" }}>
+            {entries.length === 0 ? (
+              <div className="empty">
+                <h3>هنوز سندی ثبت نشده</h3>
+                <div>
+                  به‌محض رخداد قفل اسکرو یا آزادسازی پرداخت، اینجا نمایش داده می‌شود.
+                </div>
               </div>
-              {e.workflow_reference_id && (
-                <span
-                  className="mono"
-                  style={{ color: "var(--fg-muted)", fontSize: 11 }}
-                >
-                  → {e.workflow_reference_id.slice(0, 8)}
+            ) : (
+              <div className="mobile-list">
+                {entries.map((e) => (
+                  <div
+                    key={e.id}
+                    className={
+                      "mobile-card" + (freshIds.has(e.id) ? " fresh" : "")
+                    }
+                    style={{ cursor: "default" }}
+                  >
+                    <div
+                      className="row"
+                      style={{
+                        justifyContent: "space-between",
+                        alignItems: "start",
+                        gap: 12,
+                      }}
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <div
+                          className="mono"
+                          style={{ fontSize: 12, fontWeight: 600 }}
+                        >
+                          {e.transaction_id}
+                        </div>
+                        <div
+                          className="muted"
+                          style={{ fontSize: 12, marginTop: 2 }}
+                        >
+                          {e.description ?? ""}
+                        </div>
+                      </div>
+                      <div
+                        className="muted mono"
+                        style={{ fontSize: 10, flexShrink: 0 }}
+                      >
+                        {toFaDigits(
+                          new Date(e.posted_at).toLocaleString("fa-IR"),
+                        )}
+                      </div>
+                    </div>
+                    <div className="mobile-card-meta" style={{ gap: 16 }}>
+                      <span style={{ color: "var(--state-good)" }}>
+                        بدهکار: {formatIRRPlain(e.total_cents)}
+                      </span>
+                      <span style={{ color: "var(--state-bad)" }}>
+                        بستانکار: {formatIRRPlain(e.total_cents)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            <div className="ledger-row head">
+              <span>تاریخ</span>
+              <span>شناسه سند</span>
+              <span>شرح</span>
+              <span className="debit">بدهکار</span>
+              <span className="credit">بستانکار</span>
+            </div>
+            {entries.map((e) => (
+              <div
+                key={e.id}
+                className={"ledger-row" + (freshIds.has(e.id) ? " fresh" : "")}
+              >
+                <span className="muted">
+                  {toFaDigits(new Date(e.posted_at).toLocaleString("fa-IR"))}
                 </span>
-              )}
-            </span>
-            <span className="muted" style={{ fontSize: 12 }}>
-              {e.description ?? ""}
-            </span>
-            <span className="debit">{formatIRRPlain(e.total_cents)}</span>
-            <span className="credit">{formatIRRPlain(e.total_cents)}</span>
-          </div>
-        ))}
-        {entries.length === 0 && (
-          <div className="empty">
-            <h3>هنوز سندی ثبت نشده</h3>
-            <div>به‌محض رخداد قفل اسکرو یا آزادسازی پرداخت، اینجا نمایش داده می‌شود.</div>
-          </div>
+                <span>
+                  <div className="mono" style={{ fontSize: 11 }}>
+                    {e.transaction_id}
+                  </div>
+                  {e.workflow_reference_id && (
+                    <span
+                      className="mono"
+                      style={{ color: "var(--fg-muted)", fontSize: 11 }}
+                    >
+                      → {e.workflow_reference_id.slice(0, 8)}
+                    </span>
+                  )}
+                </span>
+                <span className="muted" style={{ fontSize: 12 }}>
+                  {e.description ?? ""}
+                </span>
+                <span className="debit">{formatIRRPlain(e.total_cents)}</span>
+                <span className="credit">{formatIRRPlain(e.total_cents)}</span>
+              </div>
+            ))}
+            {entries.length === 0 && (
+              <div className="empty">
+                <h3>هنوز سندی ثبت نشده</h3>
+                <div>
+                  به‌محض رخداد قفل اسکرو یا آزادسازی پرداخت، اینجا نمایش داده می‌شود.
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 

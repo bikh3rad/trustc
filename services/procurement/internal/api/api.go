@@ -86,7 +86,19 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	out, err := h.store.List(r.Context(), q.Get("startup_id"), q.Get("state"))
+	startupID := q.Get("startup_id")
+
+	// RBAC scope: FOUNDER may only see procurements for their own startup.
+	// We honor the X-Trustc-Startup header the gateway stamps after JWT auth
+	// (and force-overwrite any caller-supplied startup_id query param).
+	role := logx.ActorRole(r.Context())
+	if role == "FOUNDER" {
+		if scope := logx.ActorStartupID(r.Context()); scope != "" {
+			startupID = scope
+		}
+	}
+
+	out, err := h.store.List(r.Context(), startupID, q.Get("state"))
 	if err != nil {
 		httpx.Error(w, err)
 		return

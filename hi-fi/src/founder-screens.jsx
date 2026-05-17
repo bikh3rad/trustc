@@ -60,7 +60,7 @@ function FounderDashboard({ ctx }) {
       </section>
 
       {/* Stat grid */}
-      <section className="grid" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+      <section className="grid stat-grid">
         <Stat
           label="خط اعتباری در دسترس"
           value={window.tc.formatIRR(startup.creditLine - startup.creditUsed, { withUnit: false })}
@@ -117,8 +117,8 @@ function FounderDashboard({ ctx }) {
       </section>
 
       {/* Two-col: pending queue + alerts */}
-      <section className="grid" style={{ gridTemplateColumns: "2fr 1fr" }}>
-        <div className="card">
+      <section className="grid two-col-shrink">
+        <div className="card responsive-table-card">
           <div className="card-title">
             <h3>خریدهای فعال در جریان</h3>
             <Btn variant="ghost" size="sm" onClick={() => ctx.setRoute("procurements")}>مشاهده همه ←</Btn>
@@ -206,12 +206,13 @@ function AlertRow({ tone, title, body, hint }) {
    ============================================================ */
 function ProcurementsList({ ctx, setNav }) {
   const [filter, setFilter] = useState("ALL");
+  const isMobile = useIsMobile();
   const procs = window.trustcData.procurements.filter(p => p.startupId === ctx.currentStartup.id);
   const filtered = filter === "ALL" ? procs : procs.filter(p => p.state === filter);
 
   return (
     <div className="stack" style={{ gap: "var(--s-6)" }}>
-      <header className="row" style={{ justifyContent: "space-between", alignItems: "end" }}>
+      <header className="row" style={{ justifyContent: "space-between", alignItems: "end", flexWrap: "wrap", gap: 12 }}>
         <div>
           <div className="eyebrow">عملیات · خرید</div>
           <h1>خریدها</h1>
@@ -238,37 +239,65 @@ function ProcurementsList({ ctx, setNav }) {
         ))}
       </div>
 
-      <div className="card" style={{ padding: 0 }}>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>شناسه</th>
-              <th>عنوان</th>
-              <th>تأمین‌کننده</th>
-              <th>دپارتمان</th>
-              <th>وضعیت</th>
-              <th className="num">مبلغ (ریال)</th>
-              <th>تاریخ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map(p => (
-              <tr key={p.id} onClick={() => setNav(p.id)}>
-                <td className="mono" style={{ fontSize: 12, color: "var(--fg-muted)" }}>{p.id}</td>
-                <td><div style={{ fontWeight: 500 }}>{p.title}</div></td>
-                <td>{window.tc.getSupplier(p.supplierId)?.name}</td>
-                <td>{p.department}</td>
-                <td><Chip state={p.state} /></td>
-                <td className="num">{window.tc.formatIRRPlain(p.amount)}</td>
-                <td className="mono muted" style={{ fontSize: 12 }}>{window.tc.toFaDigits(p.createdAt)}</td>
+      {isMobile ? (
+        <MobileList
+          items={filtered}
+          emptyTitle="چیزی یافت نشد"
+          emptyHint="فیلتر را تغییر دهید."
+          renderItem={(p) => (
+            <MobileCard
+              key={p.id}
+              title={p.title}
+              subtitle={`${window.tc.getSupplier(p.supplierId)?.name} · ${p.department}`}
+              right={
+                <div className="stack" style={{ gap: 6, alignItems: "flex-end" }}>
+                  <Chip state={p.state} />
+                  <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>{window.tc.formatIRR(p.amount)}</div>
+                </div>
+              }
+              meta={
+                <>
+                  <span className="mono">{p.id}</span>
+                  <span className="mono">{window.tc.toFaDigits(p.createdAt)}</span>
+                </>
+              }
+              onClick={() => setNav(p.id)}
+            />
+          )}
+        />
+      ) : (
+        <div className="card responsive-table-card" style={{ padding: 0 }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>شناسه</th>
+                <th>عنوان</th>
+                <th>تأمین‌کننده</th>
+                <th>دپارتمان</th>
+                <th>وضعیت</th>
+                <th className="num">مبلغ (ریال)</th>
+                <th>تاریخ</th>
               </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr><td colSpan={7}><div className="empty"><h3>چیزی یافت نشد</h3><div>فیلتر را تغییر دهید.</div></div></td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {filtered.map(p => (
+                <tr key={p.id} onClick={() => setNav(p.id)}>
+                  <td className="mono" style={{ fontSize: 12, color: "var(--fg-muted)" }}>{p.id}</td>
+                  <td><div style={{ fontWeight: 500 }}>{p.title}</div></td>
+                  <td>{window.tc.getSupplier(p.supplierId)?.name}</td>
+                  <td>{p.department}</td>
+                  <td><Chip state={p.state} /></td>
+                  <td className="num">{window.tc.formatIRRPlain(p.amount)}</td>
+                  <td className="mono muted" style={{ fontSize: 12 }}>{window.tc.toFaDigits(p.createdAt)}</td>
+                </tr>
+              ))}
+              {filtered.length === 0 && (
+                <tr><td colSpan={7}><div className="empty"><h3>چیزی یافت نشد</h3><div>فیلتر را تغییر دهید.</div></div></td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -293,6 +322,7 @@ function ProcurementDetail({ ctx, procId, setNav }) {
     return <div className="empty"><h3>خرید پیدا نشد</h3></div>;
   }
 
+  const isMobile = useIsMobile();
   const fsm = window.trustcData.procurementFSM;
   const ci = window.tc.stateIndex(proc.state);
   const nextStep = fsm[ci + 1];
@@ -375,11 +405,11 @@ function ProcurementDetail({ ctx, procId, setNav }) {
         </div>
       </header>
 
-      {/* FSM bar */}
-      <FSM currentState={proc.state} />
+      {/* FSM bar — horizontal on desktop, vertical on mobile */}
+      {isMobile ? <MobileFSMVertical currentState={proc.state} /> : <FSM currentState={proc.state} />}
 
       {/* Two-col: details + timeline */}
-      <section className="grid" style={{ gridTemplateColumns: "1fr 360px", gap: "var(--s-6)" }}>
+      <section className="grid" style={{ gridTemplateColumns: isMobile ? "1fr" : "1fr 360px", gap: "var(--s-6)" }}>
         <div className="stack" style={{ gap: "var(--s-4)" }}>
           <div className="card">
             <div className="card-title"><h3>مشخصات خرید</h3></div>

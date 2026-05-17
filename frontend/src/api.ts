@@ -1,38 +1,53 @@
 // Thin REST client for the trustC API gateway.
-// Auth: dev mode auto-mints a JWT via /auth/dev-token on first load.
+//
+// All endpoints live behind /v1/*. The JWT is stored in localStorage under
+// "trustc_token" by AuthContext and read here for every request.
 
-const BASE = "";  // vite proxy forwards /api and /auth to :8080
+const BASE = ""; // vite proxy forwards /v1 and (legacy) /api to :8080
 
-let token: string | null = localStorage.getItem("trustc.token");
+const TOKEN_KEY = "trustc_token";
 
-export async function ensureDevToken(): Promise<string> {
-  if (token) return token;
-  const r = await fetch(`${BASE}/auth/dev-token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sub: "vc-admin@trustc.dev", role: "VC_ADMIN" }),
-  });
-  if (!r.ok) throw new Error(`auth failed: ${r.status}`);
-  const j = (await r.json()) as { token: string };
-  token = j.token;
-  localStorage.setItem("trustc.token", token);
-  return token;
+export function getToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setToken(t: string | null): void {
+  if (t === null) localStorage.removeItem(TOKEN_KEY);
+  else localStorage.setItem(TOKEN_KEY, t);
 }
 
 function idempotencyKey(): string {
-  return (
-    Math.random().toString(36).slice(2) +
-    "-" +
-    Date.now().toString(36)
-  );
+  return Math.random().toString(36).slice(2) + "-" + Date.now().toString(36);
 }
 
 export type ApiError = { error: string; message: string };
 
-async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const t = await ensureDevToken();
+// ApiHttpError carries the status code + machine error code so callers can
+// branch on them (e.g. 401 → kick to login, 403 ACCOUNT_PENDING → show banner).
+export class ApiHttpError extends Error {
+  readonly status: number;
+  readonly code: string;
+  constructor(status: number, code: string, message: string) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+// onUnauthenticated lets AuthContext clear local state when any call returns 401.
+let unauthHook: (() => void) | null = null;
+export function onUnauthenticated(fn: () => void): void {
+  unauthHook = fn;
+}
+
+type CallOpts = RequestInit & { skipAuth?: boolean };
+
+async function call<T>(path: string, init: CallOpts = {}): Promise<T> {
   const h = new Headers(init.headers);
-  h.set("Authorization", `Bearer ${t}`);
+  if (!init.skipAuth) {
+    const t = getToken();
+    if (t) h.set("Authorization", `Bearer ${t}`);
+  }
   if (init.body && !h.has("Content-Type")) h.set("Content-Type", "application/json");
   if (init.method && init.method !== "GET" && init.method !== "HEAD") {
     if (!h.has("Idempotency-Key")) h.set("Idempotency-Key", idempotencyKey());
@@ -41,13 +56,90 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!r.ok) {
     const body = (await r.json().catch(() => ({}))) as Partial<ApiError>;
     const msg = body.message || body.error || `HTTP ${r.status}`;
-    throw new Error(msg);
+    if (r.status === 401 && unauthHook) unauthHook();
+    throw new ApiHttpError(r.status, body.error || `HTTP_${r.status}`, msg);
   }
   if (r.status === 204) return undefined as T;
   return (await r.json()) as T;
 }
 
-// ---- Startups ----
+/* ---------------- Auth + Users ---------------- */
+export type Role = "ADMIN" | "FOUNDER" | "VC" | "AUDITOR";
+export type AccountStatus = "PENDING" | "ACTIVE" | "DISABLED";
+
+export type AuthUser = {
+  id: string;
+  email: string;
+  role: Role;
+  status: AccountStatus;
+  name: string;
+  company?: string;
+  startup_id?: string;
+  joined_at: string;
+  last_login?: string | null;
+};
+
+export type RegisterInput = {
+  name: string;
+  email: string;
+  password: string;
+  role: Exclude<Role, "ADMIN">;
+  company: string;
+};
+
+export const Auth = {
+  registrationStatus: () =>
+    call<{ enabled: boolean }>(`/v1/auth/registration-status`, { skipAuth: true }),
+  register: (body: RegisterInput) =>
+    call<{ user: AuthUser }>(`/v1/auth/register`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      skipAuth: true,
+    }),
+  login: (email: string, password: string) =>
+    call<{ token: string; user: AuthUser }>(`/v1/auth/login`, {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+      skipAuth: true,
+    }),
+  logout: () => call<void>(`/v1/auth/logout`, { method: "POST" }),
+  me: () => call<{ user: AuthUser }>(`/v1/auth/me`),
+};
+
+/* ---------------- Admin ---------------- */
+export type SystemSettings = {
+  registration_enabled: boolean;
+  require_approval_for_roles: Role[];
+  two_factor_required: boolean;
+  audit_retention_days: number;
+  max_freeze_override_hours: number;
+  updated_at?: string;
+};
+
+export const Admin = {
+  listUsers: (params: { status?: AccountStatus; role?: Role } = {}) => {
+    const q = new URLSearchParams();
+    if (params.status) q.set("status", params.status);
+    if (params.role) q.set("role", params.role);
+    return call<{ users: AuthUser[] }>(
+      `/v1/admin/users${q.size ? `?${q.toString()}` : ""}`,
+    );
+  },
+  approveUser: (id: string) =>
+    call<{ user: AuthUser }>(`/v1/admin/users/${id}/approve`, { method: "POST" }),
+  disableUser: (id: string) =>
+    call<{ user: AuthUser }>(`/v1/admin/users/${id}/disable`, { method: "POST" }),
+  enableUser: (id: string) =>
+    call<{ user: AuthUser }>(`/v1/admin/users/${id}/enable`, { method: "POST" }),
+  getSettings: () => call<SystemSettings>(`/v1/admin/settings`),
+  patchSettings: (patch: Partial<SystemSettings>) =>
+    call<SystemSettings>(`/v1/admin/settings`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
+};
+
+/* ---------------- Startups ---------------- */
 export type Startup = {
   id: string;
   vc_id: string;
@@ -64,13 +156,13 @@ export type Startup = {
 
 export const Startups = {
   list: (vc_id?: string) =>
-    call<{ startups: Startup[] }>(`/api/startups${vc_id ? `?vc_id=${vc_id}` : ""}`),
-  get: (id: string) => call<Startup>(`/api/startups/${id}`),
+    call<{ startups: Startup[] }>(`/v1/startups${vc_id ? `?vc_id=${vc_id}` : ""}`),
+  get: (id: string) => call<Startup>(`/v1/startups/${id}`),
   create: (body: object) =>
-    call<Startup>(`/api/startups`, { method: "POST", body: JSON.stringify(body) }),
+    call<Startup>(`/v1/startups`, { method: "POST", body: JSON.stringify(body) }),
 };
 
-// ---- Procurements ----
+/* ---------------- Procurements ---------------- */
 export type Procurement = {
   id: string;
   startup_id: string;
@@ -98,22 +190,22 @@ export const Procurements = {
     const q = new URLSearchParams();
     if (startup_id) q.set("startup_id", startup_id);
     return call<{ procurements: Procurement[] }>(
-      `/api/procurements${q.size ? `?${q.toString()}` : ""}`
+      `/v1/procurements${q.size ? `?${q.toString()}` : ""}`,
     );
   },
-  get: (id: string) => call<Procurement>(`/api/procurements/${id}`),
+  get: (id: string) => call<Procurement>(`/v1/procurements/${id}`),
   history: (id: string) =>
-    call<{ history: WorkflowTransition[] }>(`/api/procurements/${id}/history`),
+    call<{ history: WorkflowTransition[] }>(`/v1/procurements/${id}/history`),
   create: (body: object) =>
-    call<Procurement>(`/api/procurements`, { method: "POST", body: JSON.stringify(body) }),
+    call<Procurement>(`/v1/procurements`, { method: "POST", body: JSON.stringify(body) }),
   transition: (id: string, to_state: string, reason?: string) =>
-    call<Procurement>(`/api/procurements/${id}/transition`, {
+    call<Procurement>(`/v1/procurements/${id}/transition`, {
       method: "POST",
       body: JSON.stringify({ to_state, reason }),
     }),
 };
 
-// ---- Escrow ----
+/* ---------------- Escrow ---------------- */
 export type EscrowAccount = {
   id: string;
   startup_id: string;
@@ -125,16 +217,15 @@ export type EscrowAccount = {
 
 export const Escrow = {
   account: (startup_id: string) =>
-    call<EscrowAccount>(`/api/escrow/accounts/${startup_id}`),
+    call<EscrowAccount>(`/v1/escrow/accounts/${startup_id}`),
   topup: (startup_id: string, amount_cents: number) =>
-    call<EscrowAccount>(`/api/escrow/accounts/${startup_id}/topup`, {
+    call<EscrowAccount>(`/v1/escrow/accounts/${startup_id}/topup`, {
       method: "POST",
       body: JSON.stringify({ amount_cents }),
     }),
 };
 
-// ---- Ledger ----
-// EntrySummary shape returned by services/ledger GET /entries
+/* ---------------- Ledger ---------------- */
 export type LedgerEntry = {
   id: string;
   transaction_id: string;
@@ -149,16 +240,16 @@ export const Ledger = {
     const q = new URLSearchParams();
     if (params.workflow_reference_id) q.set("workflow_reference_id", params.workflow_reference_id);
     return call<{ entries: LedgerEntry[] }>(
-      `/api/ledger/entries${q.size ? `?${q.toString()}` : ""}`
+      `/v1/ledger/entries${q.size ? `?${q.toString()}` : ""}`,
     );
   },
   balance: (code: string) =>
     call<{ account_code: string; balance_cents: number }>(
-      `/api/ledger/accounts/${encodeURIComponent(code)}/balance`
+      `/v1/ledger/accounts/${encodeURIComponent(code)}/balance`,
     ),
 };
 
-// ---- Audit ----
+/* ---------------- Audit ---------------- */
 export type AuditRecord = {
   event_id: string;
   service: string;
@@ -182,12 +273,12 @@ export const Audit = {
       if (v !== undefined && v !== "") q.set(k, String(v));
     });
     return call<{ records: AuditRecord[] }>(
-      `/api/audit${q.size ? `?${q.toString()}` : ""}`
+      `/v1/audit${q.size ? `?${q.toString()}` : ""}`,
     );
   },
 };
 
-// ---- Governance (freeze / kill-switch) ----
+/* ---------------- Governance ---------------- */
 export type FreezeScope = "FULL" | "PARTIAL";
 export type FreezeDuration = "TEMPORARY" | "PERMANENT";
 
@@ -207,15 +298,14 @@ export type Freeze = {
 };
 
 export const Governance = {
-  listActive: () =>
-    call<{ freezes: Freeze[] }>(`/api/governance/freezes`),
+  listActive: () => call<{ freezes: Freeze[] }>(`/v1/governance/freezes`),
   activeForStartup: (startup_id: string) =>
     call<{ frozen: boolean; freeze: Freeze | null }>(
-      `/api/governance/freezes/startup/${startup_id}`
+      `/v1/governance/freezes/startup/${startup_id}`,
     ),
   history: (startup_id: string) =>
     call<{ freezes: Freeze[] }>(
-      `/api/governance/freezes/startup/${startup_id}/history`
+      `/v1/governance/freezes/startup/${startup_id}/history`,
     ),
   activate: (body: {
     startup_id: string;
@@ -223,12 +313,12 @@ export const Governance = {
     duration: FreezeDuration;
     reason: string;
   }) =>
-    call<Freeze>(`/api/governance/freezes`, {
+    call<Freeze>(`/v1/governance/freezes`, {
       method: "POST",
       body: JSON.stringify(body),
     }),
   lift: (id: string, reason: string) =>
-    call<Freeze>(`/api/governance/freezes/${id}/lift`, {
+    call<Freeze>(`/v1/governance/freezes/${id}/lift`, {
       method: "POST",
       body: JSON.stringify({ reason }),
     }),

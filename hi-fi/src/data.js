@@ -312,11 +312,34 @@ window.trustcData = (function () {
     61, 64, 68, 70, 75, 80, 82, 85, 88, 90, 92, 92,
   ].map(r => r * 1_000_000_000);
 
+  // ---------- Users (Auth + RBAC) ----------
+  // Status: PENDING (awaiting admin approval) | ACTIVE | DISABLED
+  // Role:   ADMIN | FOUNDER | VC | AUDITOR
+  const users = [
+    { id: "u_001", name: "مدیر سیستم",  email: "admin@trustc.io",   role: "ADMIN",   status: "ACTIVE",  company: "trustC",                 joinedAt: "1404/11/01", lastLogin: "1405/03/14 09:02" },
+    { id: "u_002", name: "بنیان‌گذار آلفا", email: "founder@alpha.io",  role: "FOUNDER", status: "ACTIVE",  company: "شرکت آلفا",              joinedAt: "1404/12/04", lastLogin: "1405/03/14 08:51", startupId: "st_001" },
+    { id: "u_003", name: "مدیر صندوق",   email: "vc@trustc.io",       role: "VC",      status: "ACTIVE",  company: "صندوق سرمایه‌گذاری trustC", joinedAt: "1404/11/15", lastLogin: "1405/03/13 22:14" },
+    { id: "u_004", name: "حسابرس مستقل", email: "auditor@trustc.io",  role: "AUDITOR", status: "ACTIVE",  company: "مؤسسه حسابرسی مودیان",     joinedAt: "1405/01/12", lastLogin: "1405/03/12 14:30" },
+    { id: "u_005", name: "بنیان‌گذار بتا",  email: "founder@beta.io",   role: "FOUNDER", status: "PENDING", company: "شرکت بتا",              joinedAt: "1405/03/13", lastLogin: null, startupId: "st_002" },
+    { id: "u_006", name: "بنیان‌گذار گاما",  email: "founder@gamma.io",  role: "FOUNDER", status: "PENDING", company: "شرکت گاما",              joinedAt: "1405/03/14", lastLogin: null, startupId: "st_003" },
+    { id: "u_007", name: "علی رضایی",      email: "ali@delta.io",       role: "FOUNDER", status: "DISABLED", company: "شرکت دلتا",             joinedAt: "1405/02/01", lastLogin: "1405/02/28 10:22", startupId: "st_004" },
+  ];
+
+  // ---------- System settings (admin-controlled) ----------
+  const systemSettings = {
+    registrationEnabled: true,
+    requireApprovalForRoles: ["FOUNDER","VC","AUDITOR"],
+    twoFactorRequired: false,
+    auditRetentionDays: 365 * 7,
+    maxFreezeOverrideHours: 72,
+  };
+
   return {
     vc, startups, suppliers,
     procurements, customerInvoices,
     ledger, recyclingQueue, auditLog,
     burnSeries, revenueSeries,
+    users, systemSettings,
     // FSM definition — single source of truth
     procurementFSM: [
       { state: "DRAFT",                  label: "پیش‌نویس" },

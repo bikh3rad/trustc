@@ -135,6 +135,38 @@ WHERE id IN ('22222222-0000-0000-0000-000000000001',
              '22222222-0000-0000-0000-000000000002')
 ON CONFLICT DO NOTHING;
 
+-- --------------------------------------------------------------------------
+-- 7) Auth users — demo accounts matching hi-fi/src/data.js (v2 auth).
+--
+--    All four ACTIVE accounts share the same bcrypt(cost=12) hash for the
+--    password "demo1234" — bcrypt's salt is embedded in the hash, so a single
+--    hash works for every user. NEVER reuse a shared password in production.
+--
+--    The two PENDING founders (beta, gamma) demonstrate the admin approval
+--    flow: they cannot log in until /v1/admin/users/{id}/approve is called.
+-- --------------------------------------------------------------------------
+INSERT INTO auth.users (id, email, password_hash, role, status, name, company, startup_id)
+VALUES
+    ('aaaaaaaa-0000-0000-0000-000000000001', 'admin@trustc.io',
+        '$2a$12$IaE6Fz4n8R7t37GzLJKo4.W9JCC4zQk6VQ/Pt3boqVJEhkWZCu6kO',
+        'ADMIN',   'ACTIVE',  'مدیر سیستم',       'trustC',                           NULL),
+    ('aaaaaaaa-0000-0000-0000-000000000002', 'founder@alpha.io',
+        '$2a$12$IaE6Fz4n8R7t37GzLJKo4.W9JCC4zQk6VQ/Pt3boqVJEhkWZCu6kO',
+        'FOUNDER', 'ACTIVE',  'بنیان‌گذار آلفا',   'شرکت آلفا',                        '11111111-0000-0000-0000-000000000001'),
+    ('aaaaaaaa-0000-0000-0000-000000000003', 'vc@trustc.io',
+        '$2a$12$IaE6Fz4n8R7t37GzLJKo4.W9JCC4zQk6VQ/Pt3boqVJEhkWZCu6kO',
+        'VC',      'ACTIVE',  'مدیر صندوق',       'صندوق سرمایه‌گذاری trustC',          NULL),
+    ('aaaaaaaa-0000-0000-0000-000000000004', 'auditor@trustc.io',
+        '$2a$12$IaE6Fz4n8R7t37GzLJKo4.W9JCC4zQk6VQ/Pt3boqVJEhkWZCu6kO',
+        'AUDITOR', 'ACTIVE',  'حسابرس مستقل',     'مؤسسه حسابرسی مودیان',              NULL),
+    ('aaaaaaaa-0000-0000-0000-000000000005', 'founder@beta.io',
+        '$2a$12$IaE6Fz4n8R7t37GzLJKo4.W9JCC4zQk6VQ/Pt3boqVJEhkWZCu6kO',
+        'FOUNDER', 'PENDING', 'بنیان‌گذار بتا',    'BetaFlow',                          '11111111-0000-0000-0000-000000000002'),
+    ('aaaaaaaa-0000-0000-0000-000000000006', 'founder@gamma.io',
+        '$2a$12$IaE6Fz4n8R7t37GzLJKo4.W9JCC4zQk6VQ/Pt3boqVJEhkWZCu6kO',
+        'FOUNDER', 'PENDING', 'بنیان‌گذار گاما',   'GammaLogix',                        '11111111-0000-0000-0000-000000000003')
+ON CONFLICT (email) DO NOTHING;
+
 COMMIT;
 
 -- Diagnostic summary.
@@ -143,4 +175,6 @@ SELECT (SELECT COUNT(*) FROM startup.vcs)               AS vcs,
        (SELECT COUNT(*) FROM startup.startups)          AS startups,
        (SELECT COUNT(*) FROM escrow.escrow_accounts)    AS escrow_accounts,
        (SELECT COUNT(*) FROM ledger.journal_entries)    AS journal_entries,
-       (SELECT COUNT(*) FROM procurement.procurement_requests) AS procurements;
+       (SELECT COUNT(*) FROM procurement.procurement_requests) AS procurements,
+       (SELECT COUNT(*) FROM auth.users)                AS users,
+       (SELECT COUNT(*) FROM auth.users WHERE status='PENDING') AS users_pending;

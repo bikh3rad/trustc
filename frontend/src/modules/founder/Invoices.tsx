@@ -11,7 +11,10 @@ import { Stat } from "../../components/ui/Stat";
 import { useFrozen } from "../../context/FrozenContext";
 import { useToast } from "../../context/ToastContext";
 import { useCurrentStartup } from "../../context/CurrentStartupContext";
+import { MobileCard } from "../../layout/mobile/MobileCard";
+import { MobileList } from "../../layout/mobile/MobileList";
 import { formatIRR, formatIRRPlain, parsePersianNumber, toFaDigits } from "../../lib/format";
+import { useIsMobile } from "../../lib/useIsMobile";
 
 type SettlementMode = "ESCROW_DIRECT" | "SELF_FUNDED";
 type InvStatus = "OPEN" | "PAID";
@@ -37,6 +40,7 @@ export function Invoices() {
   const { current } = useCurrentStartup();
   const { isFrozen } = useFrozen();
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const frozen = current ? isFrozen(current.id) : false;
   const [invoices, setInvoices] = useState<Inv[]>(seed);
   const [showNew, setShowNew] = useState(false);
@@ -118,7 +122,7 @@ export function Invoices() {
           <h3>دو الگوی تسویه</h3>
         </div>
         <div
-          className="grid"
+          className="grid form-row-2"
           style={{ gridTemplateColumns: "1fr 1fr", gap: "var(--s-5)" }}
         >
           <div
@@ -160,51 +164,93 @@ export function Invoices() {
         </div>
       </div>
 
-      <div className="card" style={{ padding: 0 }}>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>شناسه</th>
-              <th>مشتری</th>
-              <th>الگو</th>
-              <th>وضعیت</th>
-              <th className="num">مبلغ (ریال)</th>
-              <th>صدور</th>
-              <th>اقدام</th>
-            </tr>
-          </thead>
-          <tbody>
-            {invoices.map((inv) => (
-              <tr key={inv.id}>
-                <td className="mono" style={{ fontSize: 12 }}>{inv.id}</td>
-                <td>{inv.customer}</td>
-                <td>
+      {isMobile ? (
+        <MobileList
+          items={invoices}
+          emptyTitle="فاکتوری ثبت نشده"
+          renderItem={(inv) => (
+            <MobileCard
+              key={inv.id}
+              onClick={inv.status === "OPEN" ? () => settle(inv) : undefined}
+              title={inv.customer}
+              subtitle={
+                <span className="mono" style={{ fontSize: 11 }}>
+                  {inv.id}
+                </span>
+              }
+              right={
+                <div className="stack" style={{ gap: 4, alignItems: "flex-end" }}>
                   <span
                     className="chip"
                     data-tone={inv.mode === "ESCROW_DIRECT" ? "active" : "good"}
                   >
                     <span className="mono">{inv.mode}</span>
                   </span>
-                </td>
-                <td><Chip state={inv.status} /></td>
-                <td className="num">{formatIRRPlain(inv.amount_cents)}</td>
-                <td className="mono muted" style={{ fontSize: 12 }}>{toFaDigits(inv.issued_at)}</td>
-                <td>
-                  {inv.status === "OPEN" ? (
-                    <Btn variant="secondary" size="sm" onClick={() => settle(inv)}>
-                      ثبت وصول
-                    </Btn>
-                  ) : (
-                    <span className="muted mono" style={{ fontSize: 11 }}>
-                      {toFaDigits(inv.paid_at ?? "")}
-                    </span>
-                  )}
-                </td>
+                  <Chip state={inv.status} />
+                </div>
+              }
+              meta={
+                <>
+                  <span style={{ fontWeight: 600, color: "var(--fg-default)" }}>
+                    {formatIRRPlain(inv.amount_cents)} ریال
+                  </span>
+                  <span style={{ marginInlineStart: "auto" }}>
+                    {inv.status === "OPEN"
+                      ? `صدور ${toFaDigits(inv.issued_at)}`
+                      : `وصول ${toFaDigits(inv.paid_at ?? "")}`}
+                  </span>
+                </>
+              }
+            />
+          )}
+        />
+      ) : (
+        <div className="card responsive-table-card" style={{ padding: 0 }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>شناسه</th>
+                <th>مشتری</th>
+                <th>الگو</th>
+                <th>وضعیت</th>
+                <th className="num">مبلغ (ریال)</th>
+                <th>صدور</th>
+                <th>اقدام</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {invoices.map((inv) => (
+                <tr key={inv.id}>
+                  <td className="mono" style={{ fontSize: 12 }}>{inv.id}</td>
+                  <td>{inv.customer}</td>
+                  <td>
+                    <span
+                      className="chip"
+                      data-tone={inv.mode === "ESCROW_DIRECT" ? "active" : "good"}
+                    >
+                      <span className="mono">{inv.mode}</span>
+                    </span>
+                  </td>
+                  <td><Chip state={inv.status} /></td>
+                  <td className="num">{formatIRRPlain(inv.amount_cents)}</td>
+                  <td className="mono muted" style={{ fontSize: 12 }}>{toFaDigits(inv.issued_at)}</td>
+                  <td>
+                    {inv.status === "OPEN" ? (
+                      <Btn variant="secondary" size="sm" onClick={() => settle(inv)}>
+                        ثبت وصول
+                      </Btn>
+                    ) : (
+                      <span className="muted mono" style={{ fontSize: 11 }}>
+                        {toFaDigits(inv.paid_at ?? "")}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {bump && (
         <div style={{ position: "fixed", bottom: 32, insetInlineStart: 32, zIndex: 90 }}>

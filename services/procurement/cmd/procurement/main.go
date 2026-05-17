@@ -91,6 +91,7 @@ func main() {
 
 	root := chi.NewRouter()
 	root.Use(httpx.RequestID)
+	root.Use(httpx.IdentityFromHeaders)
 	root.Use(httpx.Logger(func(method, path, rid string, status int, dur time.Duration) {
 		log.Info("http", "method", method, "path", path, "status", status,
 			"duration_ms", dur.Milliseconds(), "request_id", rid)

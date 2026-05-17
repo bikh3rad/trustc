@@ -62,7 +62,7 @@ function InvoicesScreen({ ctx }) {
         <Btn variant="primary" icon={<Icon.plus />} onClick={() => setShowNew(true)}>صدور فاکتور جدید</Btn>
       </header>
 
-      <section className="grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+      <section className="grid stat-grid stat-grid--3">
         <Stat label="مطالبات باز" value={window.tc.formatIRR(totalOpen, { withUnit: false })} unit="میلیارد ریال" hint={`${window.tc.toFaDigits(open.length)} فاکتور`} />
         <Stat label="وصول این ماه"   value={window.tc.formatIRR(totalPaid, { withUnit: false })} unit="میلیارد ریال" hint={`${window.tc.toFaDigits(paid.length)} فاکتور`} />
         <Stat label="سقف اعتباری فعلی" value={window.tc.formatIRR(startup.creditLine, { withUnit: false })} unit="میلیارد ریال" delta={creditBumpVisual ? { text: `+${window.tc.formatIRR(creditBumpVisual.amount, {withUnit:false})}`, tone: "up" } : null} />
@@ -89,7 +89,7 @@ function InvoicesScreen({ ctx }) {
         </div>
       </div>
 
-      <div className="card" style={{ padding: 0 }}>
+      <div className="card responsive-table-card" style={{ padding: 0 }}>
         <table className="table">
           <thead>
             <tr>
@@ -202,7 +202,7 @@ function EscrowScreen({ ctx }) {
         </div>
       </header>
 
-      <section className="grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+      <section className="grid stat-grid stat-grid--3">
         <Stat label="کل قفل‌شده در اسکرو" value={window.tc.formatIRR(totalLocked, { withUnit: false })} unit="میلیارد ریال" />
         <Stat label="ظرفیت قفل JIT"      value={window.tc.formatIRR(startup.creditLine - startup.creditUsed + totalLocked, { withUnit: false })} unit="میلیارد ریال" hint="بر اساس سقف اعتباری" />
         <Stat label="میانگین چرخه آزادسازی" value={window.tc.toFaDigits(7)} unit="روز" delta={{ text: "↓ ۱٫۲ روز نسبت به ماه قبل", tone: "up" }} />
@@ -224,7 +224,7 @@ function EscrowScreen({ ctx }) {
         </p>
       </div>
 
-      <div className="card" style={{ padding: 0 }}>
+      <div className="card responsive-table-card" style={{ padding: 0 }}>
         <div className="card-title" style={{ padding: "var(--s-5)", marginBottom: 0 }}>
           <h3>قفل‌های فعال اسکرو</h3>
           <div className="row" style={{ gap: 8, fontSize: 12 }}>
@@ -292,6 +292,7 @@ function Arrow() {
    ============================================================ */
 function LedgerScreen({ ctx }) {
   const entries = ctx.ledger;
+  const isMobile = useIsMobile();
   const totals = entries.reduce((acc, t) => {
     t.entries.forEach(e => { acc.debit += e.debit; acc.credit += e.credit; });
     return acc;
@@ -307,41 +308,70 @@ function LedgerScreen({ ctx }) {
         </p>
       </header>
 
-      <section className="grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+      <section className="grid stat-grid stat-grid--3">
         <Stat label="جمع بدهکار" value={window.tc.formatIRR(totals.debit, { withUnit: false })} unit="میلیارد ریال" />
         <Stat label="جمع بستانکار" value={window.tc.formatIRR(totals.credit, { withUnit: false })} unit="میلیارد ریال" />
         <Stat label="تراز" value={totals.debit === totals.credit ? "متوازن ✓" : "نامتوازن"} delta={{ text: "Σ Debits = Σ Credits", tone: totals.debit === totals.credit ? "up" : "down" }} />
       </section>
 
-      <div className="card" style={{ padding: 0 }}>
-        <div style={{ padding: "var(--s-4) var(--s-5)", borderBottom: "1px solid var(--border-hairline)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h3>اسناد اخیر</h3>
-          <div className="muted mono" style={{ fontSize: 11 }}>
-            تازه‌ترین رویداد: {entries[0] ? window.tc.toFaDigits(entries[0].at) : "—"}
-          </div>
-        </div>
-        <div className="ledger-row head">
-          <span>تاریخ</span>
-          <span>شناسه سند</span>
-          <span>شرح</span>
-          <span className="debit">بدهکار</span>
-          <span className="credit">بستانکار</span>
-        </div>
-        {entries.flatMap((t, ti) =>
-          t.entries.map((e, ei) => (
-            <div key={t.txn + "-" + ei} className={"ledger-row" + (ti === 0 && t._fresh ? " fresh" : "")}>
-              <span className="muted">{ei === 0 ? window.tc.toFaDigits(t.at) : ""}</span>
-              <span>
-                {ei === 0 && <div className="mono" style={{ fontSize: 11 }}>{t.txn}</div>}
-                <span className="mono" style={{ color: "var(--fg-muted)", fontSize: 11 }}>{e.code}</span> {e.account}
-              </span>
-              <span className="muted" style={{ fontSize: 12 }}>{ei === 0 ? t.desc : ""}</span>
-              <span className="debit">{e.debit ? window.tc.formatIRRPlain(e.debit) : "—"}</span>
-              <span className="credit">{e.credit ? window.tc.formatIRRPlain(e.credit) : "—"}</span>
+      {isMobile ? (
+        <div className="mobile-list">
+          {entries.map(t => (
+            <div key={t.txn} className={"mobile-card" + (t._fresh ? " fresh" : "")} style={{ cursor: "default", animation: t._fresh ? "fresh 480ms var(--ease-document)" : null }}>
+              <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
+                <div>
+                  <div className="mono" style={{ fontSize: 11, color: "var(--fg-muted)" }}>{t.txn}</div>
+                  <div style={{ fontWeight: 600, marginTop: 2 }}>{t.desc}</div>
+                </div>
+                <div className="mono muted" style={{ fontSize: 11, textAlign: "end" }}>{window.tc.toFaDigits(t.at)}</div>
+              </div>
+              <div className="stack" style={{ gap: 6, marginTop: 8, paddingTop: 8, borderTop: "1px dashed var(--border-hairline)" }}>
+                {t.entries.map((e, i) => (
+                  <div key={i} className="row" style={{ justifyContent: "space-between", fontFamily: "var(--mono-data)", fontSize: 12, fontVariantNumeric: "tabular-nums" }}>
+                    <span style={{ minWidth: 0 }}>
+                      <span className="muted" style={{ fontSize: 10 }}>{e.code}</span>{" "}
+                      <span>{e.account}</span>
+                    </span>
+                    <span style={{ flexShrink: 0, color: e.debit ? "var(--state-bad)" : "var(--state-good)", fontWeight: 600 }}>
+                      {e.debit ? "بد · " + window.tc.formatIRRPlain(e.debit) : "بس · " + window.tc.formatIRRPlain(e.credit)}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div className="card responsive-table-card" style={{ padding: 0 }}>
+          <div style={{ padding: "var(--s-4) var(--s-5)", borderBottom: "1px solid var(--border-hairline)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <h3>اسناد اخیر</h3>
+            <div className="muted mono" style={{ fontSize: 11 }}>
+              تازه‌ترین رویداد: {entries[0] ? window.tc.toFaDigits(entries[0].at) : "—"}
+            </div>
+          </div>
+          <div className="ledger-row head">
+            <span>تاریخ</span>
+            <span>شناسه سند</span>
+            <span>شرح</span>
+            <span className="debit">بدهکار</span>
+            <span className="credit">بستانکار</span>
+          </div>
+          {entries.flatMap((t, ti) =>
+            t.entries.map((e, ei) => (
+              <div key={t.txn + "-" + ei} className={"ledger-row" + (ti === 0 && t._fresh ? " fresh" : "")}>
+                <span className="muted">{ei === 0 ? window.tc.toFaDigits(t.at) : ""}</span>
+                <span>
+                  {ei === 0 && <div className="mono" style={{ fontSize: 11 }}>{t.txn}</div>}
+                  <span className="mono" style={{ color: "var(--fg-muted)", fontSize: 11 }}>{e.code}</span> {e.account}
+                </span>
+                <span className="muted" style={{ fontSize: 12 }}>{ei === 0 ? t.desc : ""}</span>
+                <span className="debit">{e.debit ? window.tc.formatIRRPlain(e.debit) : "—"}</span>
+                <span className="credit">{e.credit ? window.tc.formatIRRPlain(e.credit) : "—"}</span>
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
       <div className="card flat" style={{ background: "var(--cream-100)", border: "1px dashed var(--cream-300)" }}>
         <div className="eyebrow" style={{ marginBottom: 8 }}>قاعده ثابت · غیرقابل تغییر</div>

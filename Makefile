@@ -1,6 +1,6 @@
 # trustC — developer entry points
 .PHONY: help up down logs migrate seed reset \
-        build run-gateway run-startup run-procurement run-escrow run-ledger run-audit run-governance \
+        build run-gateway run-startup run-procurement run-escrow run-ledger run-audit run-governance run-auth run-admin \
         frontend-install frontend-dev test e2e fmt vet tidy
 
 help:
@@ -21,6 +21,8 @@ help:
 	@echo "    run-ledger         :7004  gRPC ledger service"
 	@echo "    run-audit          :7005  gRPC audit service"
 	@echo "    run-governance     :7006  gRPC governance (freeze) service"
+	@echo "    run-admin          :7007  admin (users + system settings)"
+	@echo "    run-auth           :7008  auth (login/register/me)"
 	@echo ""
 	@echo "  Frontend:"
 	@echo "    frontend-install   npm install"
@@ -73,6 +75,12 @@ run-audit:
 
 run-governance:
 	cd services/governance && go run ./cmd/governance
+
+run-admin:
+	cd services/admin && go run ./cmd/admin
+
+run-auth:
+	cd services/auth && go run ./cmd/auth
 
 # --- Frontend ---
 frontend-install:

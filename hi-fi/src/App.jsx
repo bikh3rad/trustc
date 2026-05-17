@@ -2,24 +2,25 @@
    trustC — App root
    ------------------------------------------------------------
    Top-level state:
-   - persona ('FOUNDER' | 'VC' | 'AUDITOR')
-   - route   (string id matching nav items)
-   - nav     (sub-route within a module, e.g. selected proc id)
-   - frozenIds (Set of startup IDs frozen by VC)
-   - ledger  (live ledger stream — gets prepended on FSM events)
-   - tweaks  (persistence via __edit_mode_set_keys protocol)
+   - authUser  — currently authenticated user (null = show login)
+   - authView  — "login" | "register" (used pre-auth)
+   - persona   — derived from authUser.role; admin can impersonate
+   - route     — nav id (per-persona)
+   - frozenIds — Set of startup IDs frozen by VC
+   - ledger    — live ledger stream
+   - tweaks    — persistence via __edit_mode_set_keys protocol
+   - sidebarOpen — mobile drawer state
 
-   Context object `ctx` is passed to every screen with the
-   currentStartup, helpers, toast(), and event emitters.
+   For Claude Code:
+   - In real app, swap the in-memory authUser for a token-based
+     React Query / Zustand store with refresh tokens.
+   - The persona switcher in <Topbar> is only rendered when
+     authUser.role === "ADMIN" — true RBAC for non-admins.
    ============================================================ */
 
-const { useState: useStateApp, useEffect: useEffectApp, useMemo: useMemoApp } = React;
+const { useState: useStateApp, useEffect: useEffectApp } = React;
 
-/* ============================================================
-   TWEAK DEFAULTS — written to disk via host edit-mode protocol
-   ============================================================ */
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
-  "persona": "FOUNDER",
   "density": "comfortable",
   "theme": "light",
   "showLegalTerms": true,
@@ -27,16 +28,25 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
 }/*EDITMODE-END*/;
 
 function App() {
-  // ---- Tweaks (sync to root data attrs) ----
-  // useTweaks returns [values, setTweak]
+  // ---- Tweaks ----
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
 
+  // ---- Auth ----
+  // In real app, restore from localStorage / refresh token.
+  const [authUser, setAuthUser] = useStateApp(null);
+  const [authView, setAuthView] = useStateApp("login"); // "login" | "register"
+  const [registrationEnabled, setRegistrationEnabled] = useStateApp(window.trustcData.systemSettings.registrationEnabled);
+
   // ---- Routing ----
-  const [persona, setPersona] = useStateApp(t.persona);
+  // Active persona — initial = authUser.role, ADMIN can switch (impersonate)
+  const [persona, setPersona] = useStateApp("FOUNDER");
   const [route, setRouteState] = useStateApp("dashboard");
   const [nav, setNav] = useStateApp(null);
 
-  // ---- VC-side state ----
+  // ---- Mobile drawer ----
+  const [sidebarOpen, setSidebarOpen] = useStateApp(false);
+
+  // ---- VC-side ----
   const [frozenIds, setFrozenIds] = useStateApp(() => {
     const seed = new Set();
     window.trustcData.startups.forEach(s => { if (s.frozen) seed.add(s.id); });
@@ -50,16 +60,15 @@ function App() {
   // ---- Toasts ----
   const [toasts, setToasts] = useStateApp([]);
 
-  // ---- Founder current startup (always st_001 in this demo) ----
-  const currentStartup = window.trustcData.startups[0];
+  // ---- Force-refresh counter (admin actions mutate window.trustcData) ----
+  const [refreshTick, setRefreshTick] = useStateApp(0);
+  function forceRefresh() { setRefreshTick(n => n + 1); }
 
-  // ---- Persona <-> route sync ----
-  // When persona changes, jump to default screen for that persona.
-  useEffectApp(() => {
-    const defaults = { FOUNDER: "dashboard", VC: "portfolio", AUDITOR: "audit" };
-    setRouteState(defaults[persona]);
-    setNav(null);
-  }, [persona]);
+  // ---- Viewport detection (hooks MUST run before any conditional return) ----
+  const isMobile = useIsMobile();
+
+  // ---- Current startup (for FOUNDER persona) ----
+  const currentStartup = window.trustcData.startups[0];
 
   // ---- Apply tweaks to root element ----
   useEffectApp(() => {
@@ -71,10 +80,25 @@ function App() {
     window.tc.config.numerals = t.numerals === "fa" ? "fa" : "latin";
   }, [t.density, t.theme, t.numerals, t.showLegalTerms]);
 
-  // When the host posts the persona tweak, mirror it into local state
-  useEffectApp(() => { if (t.persona !== persona) setPersona(t.persona); }, [t.persona]);
+  // ---- On auth, sync persona + default route to user's role ----
+  useEffectApp(() => {
+    if (!authUser) return;
+    setPersona(authUser.role);
+  }, [authUser]);
 
-  // ---- Helpers passed via ctx ----
+  useEffectApp(() => {
+    const defaults = {
+      FOUNDER: "dashboard",
+      VC: "portfolio",
+      AUDITOR: "audit",
+      ADMIN: "admin-overview",
+    };
+    setRouteState(defaults[persona]);
+    setNav(null);
+    setSidebarOpen(false);
+  }, [persona]);
+
+  // ---- Helpers ----
   function toast({ tone = "neutral", msg }) {
     const id = Math.random();
     setToasts(list => [...list, { id, tone, msg }]);
@@ -83,19 +107,16 @@ function App() {
 
   function emitLedger(entry) {
     setLedger(list => [{ ...entry, _fresh: true }, ...list]);
-    setTimeout(() => {
-      setLedger(list => list.map(e => ({ ...e, _fresh: false })));
-    }, 600);
+    setTimeout(() => setLedger(list => list.map(e => ({ ...e, _fresh: false }))), 600);
   }
 
   function freeze(startupId, payload) {
     setFrozenIds(s => new Set([...s, startupId]));
     toast({ tone: "bad", msg: `Kill Switch فعال شد · ${window.tc.getStartup(startupId)?.name}` });
-    // emit audit (in-memory only)
     window.trustcData.auditLog.unshift({
       id: "aud_" + Math.random().toString(36).slice(2,5),
       at: new Date().toLocaleString("fa-IR"),
-      actor: "VC trustC", actorRole: "VC", action: "FreezeActivated",
+      actor: authUser?.name || "VC trustC", actorRole: "VC", action: "FreezeActivated",
       target: startupId, from: null, to: "FROZEN",
       hash: "live_" + Math.random().toString(16).slice(2,12) + "…",
     });
@@ -104,24 +125,17 @@ function App() {
     setFrozenIds(s => { const n = new Set(s); n.delete(startupId); return n; });
     toast({ tone: "good", msg: "فریز لغو شد · جریان‌های کاری مجدداً فعال شدند" });
   }
-
-  // Founder's startup is the "current" one for founder context;
-  // it can be frozen by the VC, which affects the entire UI.
-  const founderFrozen = frozenIds.has(currentStartup.id);
-
-  // For the credit-line bump animation
   function bumpCreditLine(amount) {
     currentStartup.creditLine += amount;
     currentStartup.creditUsed = Math.max(0, currentStartup.creditUsed - amount * 0.4);
   }
 
-  // Register tweaks-panel-triggered actions
+  // ---- Register tweaks-panel-triggered actions ----
   useEffectApp(() => {
     window.__trustcActions = {
       recycle: () => {
         setRouteState("recycling");
         setPersona("VC");
-        setTweak("persona", "VC");
         toast({ tone: "good", msg: "به پنل بازیافت سرمایه منتقل شدید — دکمه «اجرای چرخه» را فشار دهید." });
       },
       freezeAlpha: () => {
@@ -131,22 +145,71 @@ function App() {
     };
   }, []);
 
+  // ---- Auth handlers ----
+  function handleLogin(user) {
+    setAuthUser(user);
+    toast({ tone: "good", msg: `خوش آمدید، ${user.name}` });
+  }
+  function handleRegister(form) {
+    const newUser = {
+      id: "u_" + Math.random().toString(36).slice(2,5),
+      name: form.name, email: form.email, role: form.role,
+      status: "PENDING",
+      company: form.company,
+      joinedAt: new Date().toLocaleDateString("fa-IR"),
+      lastLogin: null,
+    };
+    window.trustcData.users.push(newUser);
+  }
+  function handleLogout() {
+    setAuthUser(null);
+    setAuthView("login");
+    setPersona("FOUNDER");
+    toast({ tone: "neutral", msg: "خروج موفق" });
+  }
+
+  // ---- Pre-auth: show login / register ----
+  if (!authUser) {
+    if (authView === "register") {
+      return (
+        <>
+          <Register
+            registrationEnabled={registrationEnabled}
+            onRegister={handleRegister}
+            onGoLogin={() => setAuthView("login")} />
+          <Toasts toasts={toasts} />
+        </>
+      );
+    }
+    return (
+      <>
+        <Login
+          registrationEnabled={registrationEnabled}
+          onAuth={handleLogin}
+          onGoRegister={() => setAuthView("register")} />
+        <Toasts toasts={toasts} />
+      </>
+    );
+  }
+
+  // ---- Context for screens ----
+  const founderFrozen = frozenIds.has(currentStartup.id);
   const ctx = {
     persona, currentStartup,
-    setRoute: (r, n = null) => { setRouteState(r); setNav(n); },
+    user: authUser,
+    setRoute: (r, n = null) => { setRouteState(r); setNav(n); setSidebarOpen(false); },
     nav, setNav,
     frozen: founderFrozen,
     frozenIds, freeze, unfreeze,
     openStartupModal: setOpenStartup,
-    openFreezeFor: (s) => { /* opens confirm dialog via KillSwitchScreen — see there */ },
+    openFreezeFor: () => {},
     emitLedger, ledger,
     bumpCreditLine,
-    toast,
+    toast, forceRefresh,
   };
 
   // ---- Screen routing ----
   function CurrentScreen() {
-    // Founder
     if (persona === "FOUNDER") {
       if (route === "dashboard")    return <FounderDashboard ctx={ctx} />;
       if (route === "procurements") {
@@ -154,45 +217,87 @@ function App() {
         if (nav)           return <ProcurementDetail ctx={ctx} procId={nav} setNav={setNav} />;
         return <ProcurementsList ctx={ctx} setNav={setNav} />;
       }
-      if (route === "invoices")    return <InvoicesScreen ctx={ctx} />;
-      if (route === "escrow")      return <EscrowScreen ctx={ctx} />;
-      if (route === "ledger")      return <LedgerScreen ctx={ctx} />;
+      if (route === "invoices")  return <InvoicesScreen ctx={ctx} />;
+      if (route === "escrow")    return <EscrowScreen ctx={ctx} />;
+      if (route === "ledger")    return <LedgerScreen ctx={ctx} />;
     }
-    // VC
     if (persona === "VC") {
       if (route === "portfolio")  return <PortfolioScreen ctx={ctx} />;
       if (route === "recycling")  return <RecyclingScreen ctx={ctx} />;
       if (route === "killswitch") return <KillSwitchScreen ctx={ctx} />;
     }
-    // Auditor
     if (persona === "AUDITOR") {
       if (route === "audit")   return <AuditScreen ctx={ctx} />;
       if (route === "reports") return <ReportsScreen ctx={ctx} />;
     }
-    return <FounderDashboard ctx={ctx} />;
+    if (persona === "ADMIN") {
+      if (route === "admin-overview") return <AdminOverview ctx={ctx} />;
+      if (route === "admin-users")    return <AdminUsers ctx={ctx} />;
+      if (route === "admin-settings") return <AdminSettings ctx={ctx} />;
+    }
+    // Fallback
+    return persona === "ADMIN" ? <AdminOverview ctx={ctx} /> : <FounderDashboard ctx={ctx} />;
   }
 
   const frozenStartupForBanner = founderFrozen && persona === "FOUNDER" ? currentStartup : null;
+  const isRealAdmin = authUser.role === "ADMIN";
+
+  // ---- Mobile shell branch ----
+  if (isMobile) {
+    return (
+      <>
+        <MobileShell
+          user={authUser}
+          persona={persona}
+          setPersona={setPersona}
+          isAdmin={isRealAdmin}
+          route={route}
+          setRoute={(r) => { setRouteState(r); setNav(null); }}
+          onLogout={handleLogout}>
+          <CurrentScreen key={refreshTick} />
+        </MobileShell>
+        <StartupModal startup={openStartup}
+          onClose={() => setOpenStartup(null)}
+          ctx={{ ...ctx, openFreezeFor: () => { setOpenStartup(null); setRouteState("killswitch"); }, unfreeze }} />
+        {founderFrozen && persona === "FOUNDER" && (
+          <>
+            <div className="frozen-overlay" />
+            <div className="frozen-banner">
+              <span className="dot" />
+              FROZEN · تعلیق شده
+            </div>
+          </>
+        )}
+        <Toasts toasts={toasts} />
+      </>
+    );
+  }
 
   return (
     <div className="app-shell">
       <Sidebar persona={persona} route={route}
         setRoute={(r) => { setRouteState(r); setNav(null); }}
-        currentStartup={persona === "FOUNDER" ? currentStartup : null} />
+        currentStartup={persona === "FOUNDER" ? currentStartup : null}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)} />
       <div className="app-main">
-        <Topbar persona={persona} setPersona={(p) => { setPersona(p); setTweak("persona", p); }}
-          frozenStartup={frozenStartupForBanner} />
+        <Topbar
+          user={authUser}
+          persona={persona}
+          setPersona={setPersona}
+          isAdmin={isRealAdmin}
+          frozenStartup={frozenStartupForBanner}
+          onMenu={() => setSidebarOpen(o => !o)}
+          onLogout={handleLogout} />
         <main className="app-content">
-          <CurrentScreen />
+          <CurrentScreen key={refreshTick} />
         </main>
       </div>
 
-      {/* VC startup-detail modal */}
       <StartupModal startup={openStartup}
         onClose={() => setOpenStartup(null)}
-        ctx={{ ...ctx, openFreezeFor: (s) => { setOpenStartup(null); setRouteState("killswitch"); }, unfreeze }} />
+        ctx={{ ...ctx, openFreezeFor: () => { setOpenStartup(null); setRouteState("killswitch"); }, unfreeze }} />
 
-      {/* Frozen UI overlay (Founder view, when startup is frozen) */}
       {founderFrozen && persona === "FOUNDER" && (
         <>
           <div className="frozen-overlay" />
@@ -203,36 +308,10 @@ function App() {
         </>
       )}
 
-      {/* Toasts */}
-      <div style={{ position: "fixed", bottom: 16, insetInlineEnd: 16, display: "flex", flexDirection: "column", gap: 8, zIndex: 200 }}>
-        {toasts.map(t => (
-          <div key={t.id} style={{
-            background: t.tone === "bad" ? "var(--state-bad)" : t.tone === "good" ? "var(--state-good)" : "var(--navy-900)",
-            color: "#fff",
-            padding: "10px 16px",
-            borderRadius: 4,
-            fontSize: 13,
-            boxShadow: "var(--shadow-2)",
-            maxWidth: 360,
-            animation: "fly 320ms var(--ease-document)",
-          }}>{t.msg}</div>
-        ))}
-      </div>
+      <Toasts toasts={toasts} />
 
-      {/* Tweaks panel */}
+      {/* Tweaks panel (visible to all logged-in users) */}
       <TweaksPanel title="Tweaks · trustC">
-        <TweakSection label="پرسونا" />
-        <TweakRadio
-          label="نقش فعال"
-          value={t.persona}
-          onChange={(v) => setTweak("persona", v)}
-          options={[
-            { value: "FOUNDER", label: "بنیان‌گذار" },
-            { value: "VC",      label: "VC" },
-            { value: "AUDITOR", label: "ممیز" },
-          ]}
-        />
-
         <TweakSection label="ظاهر" />
         <TweakRadio
           label="تم"
@@ -271,26 +350,32 @@ function App() {
         />
 
         <TweakSection label="اقدامات نمایشی" />
-        <TweakButton label="اجرای چرخه بازیافت" onClick={() => triggerRecycleDemo()} />
-        <TweakButton label="فریز شرکت آلفا" onClick={() => triggerFreezeDemo()} />
+        <TweakButton label="اجرای چرخه بازیافت" onClick={() => window.__trustcActions?.recycle?.()} />
+        <TweakButton label="فریز شرکت آلفا" onClick={() => window.__trustcActions?.freezeAlpha?.()} />
       </TweaksPanel>
     </div>
   );
 }
 
-// Hooks for the demo actions on the tweaks panel.
-// We use a global hook here so external triggers (incl. Tweaks panel)
-// can run actions inside the App's React state. The handlers are
-// registered by App via window.__trustcActions.
-function triggerRecycleDemo() {
-  window.__trustcActions?.recycle?.();
-}
-function triggerFreezeDemo() {
-  window.__trustcActions?.freezeAlpha?.();
+/* ---------------- Toasts (extracted for reuse pre-auth) ---------------- */
+function Toasts({ toasts }) {
+  return (
+    <div style={{ position: "fixed", bottom: 16, insetInlineEnd: 16, display: "flex", flexDirection: "column", gap: 8, zIndex: 200 }}>
+      {toasts.map(t => (
+        <div key={t.id} style={{
+          background: t.tone === "bad" ? "var(--state-bad)" : t.tone === "good" ? "var(--state-good)" : "var(--navy-900)",
+          color: "#fff",
+          padding: "10px 16px",
+          borderRadius: 4,
+          fontSize: 13,
+          boxShadow: "var(--shadow-2)",
+          maxWidth: 360,
+          animation: "fly 320ms var(--ease-document)",
+        }}>{t.msg}</div>
+      ))}
+    </div>
+  );
 }
 
-/* ============================================================
-   Mount
-   ============================================================ */
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(<App />);

@@ -329,7 +329,7 @@ function StartupDetailModal({
         </>
       }
     >
-      <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      <div className="grid form-row-2" style={{ gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <Stat
           label="موجودی اسکرو"
           value={account ? formatIRR(account.balance_cents, { withUnit: false }) : "—"}

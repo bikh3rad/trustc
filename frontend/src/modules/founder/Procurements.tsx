@@ -5,7 +5,10 @@ import { Btn } from "../../components/ui/Btn";
 import { Chip } from "../../components/ui/Chip";
 import { Icon } from "../../components/ui/Icon";
 import { useCurrentStartup } from "../../context/CurrentStartupContext";
+import { MobileCard } from "../../layout/mobile/MobileCard";
+import { MobileList } from "../../layout/mobile/MobileList";
 import { formatIRRPlain, toFaDigits } from "../../lib/format";
+import { useIsMobile } from "../../lib/useIsMobile";
 
 const FILTERS = [
   "ALL",
@@ -20,6 +23,7 @@ const FILTERS = [
 export function Procurements() {
   const navigate = useNavigate();
   const { current } = useCurrentStartup();
+  const isMobile = useIsMobile();
   const [items, setItems] = useState<Procurement[]>([]);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("ALL");
   const [err, setErr] = useState<string | null>(null);
@@ -97,50 +101,75 @@ export function Procurements() {
         ))}
       </div>
 
-      <div className="card" style={{ padding: 0 }}>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>شناسه</th>
-              <th>عنوان</th>
-              <th>تأمین‌کننده</th>
-              <th>دسته</th>
-              <th>وضعیت</th>
-              <th className="num">مبلغ (ریال)</th>
-              <th>تاریخ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((p) => (
-              <tr key={p.id} onClick={() => navigate(`/procurements/${p.id}`)}>
-                <td className="mono" style={{ fontSize: 12, color: "var(--fg-muted)" }}>
-                  {p.id.slice(0, 8)}
-                </td>
-                <td style={{ fontWeight: 500 }}>{p.title}</td>
-                <td>{p.supplier_name}</td>
-                <td>{p.category}</td>
-                <td>
-                  <Chip state={p.state} />
-                </td>
-                <td className="num">{formatIRRPlain(p.amount_cents)}</td>
-                <td className="mono muted" style={{ fontSize: 12 }}>
-                  {toFaDigits(new Date(p.created_at).toLocaleDateString("fa-IR"))}
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
+      {isMobile ? (
+        <MobileList
+          items={filtered}
+          emptyTitle="چیزی یافت نشد"
+          emptyHint={items.length === 0 ? "هنوز خریدی ثبت نشده." : "فیلتر را تغییر دهید."}
+          renderItem={(p) => (
+            <MobileCard
+              key={p.id}
+              onClick={() => navigate(`/procurements/${p.id}`)}
+              title={p.title}
+              subtitle={`${p.supplier_name} · ${p.category}`}
+              right={<Chip state={p.state} />}
+              meta={
+                <>
+                  <span>{formatIRRPlain(p.amount_cents)} ریال</span>
+                  <span style={{ marginInlineStart: "auto" }}>
+                    {toFaDigits(new Date(p.created_at).toLocaleDateString("fa-IR"))}
+                  </span>
+                </>
+              }
+            />
+          )}
+        />
+      ) : (
+        <div className="card responsive-table-card" style={{ padding: 0 }}>
+          <table className="table">
+            <thead>
               <tr>
-                <td colSpan={7}>
-                  <div className="empty">
-                    <h3>چیزی یافت نشد</h3>
-                    <div>{items.length === 0 ? "هنوز خریدی ثبت نشده." : "فیلتر را تغییر دهید."}</div>
-                  </div>
-                </td>
+                <th>شناسه</th>
+                <th>عنوان</th>
+                <th>تأمین‌کننده</th>
+                <th>دسته</th>
+                <th>وضعیت</th>
+                <th className="num">مبلغ (ریال)</th>
+                <th>تاریخ</th>
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {filtered.map((p) => (
+                <tr key={p.id} onClick={() => navigate(`/procurements/${p.id}`)}>
+                  <td className="mono" style={{ fontSize: 12, color: "var(--fg-muted)" }}>
+                    {p.id.slice(0, 8)}
+                  </td>
+                  <td style={{ fontWeight: 500 }}>{p.title}</td>
+                  <td>{p.supplier_name}</td>
+                  <td>{p.category}</td>
+                  <td>
+                    <Chip state={p.state} />
+                  </td>
+                  <td className="num">{formatIRRPlain(p.amount_cents)}</td>
+                  <td className="mono muted" style={{ fontSize: 12 }}>
+                    {toFaDigits(new Date(p.created_at).toLocaleDateString("fa-IR"))}
+                  </td>
+                </tr>
+              ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={7}>
+                    <div className="empty">
+                      <h3>چیزی یافت نشد</h3>
+                      <div>{items.length === 0 ? "هنوز خریدی ثبت نشده." : "فیلتر را تغییر دهید."}</div>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
