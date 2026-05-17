@@ -1,0 +1,16 @@
+# Keep build contexts small. .dockerignore applies to ALL builds rooted here.
+**/node_modules
+**/dist
+**/.vite
+frontend/node_modules
+frontend/dist
+
+# Persisted data + logs
+deploy/data
+*.log
+
+# Editor + VCS noise
+.git
+.idea
+.vscode
+**/.DS_Store

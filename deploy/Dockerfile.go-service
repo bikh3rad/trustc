@@ -1,0 +1,34 @@
+# Generic Dockerfile for any trustC Go microservice.
+#
+# Build context is the repo root (go.work needs to see all service modules).
+# The SERVICE build arg picks which one to compile + run, e.g.:
+#   docker build --build-arg SERVICE=auth -f deploy/Dockerfile.go-service .
+#
+# Each service has the same layout: services/<svc>/cmd/<svc>/main.go +
+# services/<svc>/internal/...  + services/<svc>/go.mod with `replace
+# services/shared => ../shared`. Go workspaces handle the local replace.
+
+# ─── build stage ────────────────────────────────────────────────────────────
+FROM golang:1.22-alpine AS build
+RUN apk add --no-cache git ca-certificates
+WORKDIR /src
+
+# Copy the workspace files first so cache breaks only when go.mod/sum change.
+COPY go.work ./
+COPY go.work.sum ./
+COPY services ./services
+
+ARG SERVICE
+RUN test -n "$SERVICE" || (echo "SERVICE build-arg required" && exit 1)
+
+# Compile statically so the runtime image can stay scratch-thin.
+WORKDIR /src/services/${SERVICE}
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags '-s -w' -o /out/svc ./cmd/${SERVICE}
+
+# ─── runtime stage ──────────────────────────────────────────────────────────
+FROM alpine:3.19
+RUN apk add --no-cache ca-certificates wget
+COPY --from=build /out/svc /usr/local/bin/svc
+
+# Every service is a single static binary; entrypoint is fixed.
+ENTRYPOINT ["/usr/local/bin/svc"]

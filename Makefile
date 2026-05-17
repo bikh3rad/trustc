@@ -33,14 +33,18 @@ help:
 	@echo "    e2e                Full smoke test through the stack"
 
 up:
-	docker compose up -d postgres nats redis
-	docker compose run --rm migrate
+	docker compose up -d --build
 
 down:
 	docker compose down
 
 logs:
 	docker compose logs -f
+
+# Bring up only infrastructure (postgres + nats + redis). Useful when you
+# want to run the Go services natively against containerised infra.
+up-infra:
+	docker compose up -d postgres nats redis
 
 migrate:
 	docker compose run --rm migrate
@@ -52,7 +56,6 @@ reset:
 	docker compose down -v
 	rm -rf deploy/data
 	$(MAKE) up
-	$(MAKE) seed
 
 # --- Services ---
 run-gateway:

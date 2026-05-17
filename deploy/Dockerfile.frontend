@@ -1,0 +1,16 @@
+# Frontend dev server (vite). For production you'd `npm run build` and serve
+# the dist/ statically (e.g. nginx); this is the local dev image.
+FROM node:20-alpine
+WORKDIR /app
+
+# Copy lockfile-only first for a stable npm-install layer.
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+COPY frontend/ ./
+
+# --host 0.0.0.0 is required for the dev server to be reachable from outside
+# the container; Compose pins the host-side bind to 127.0.0.1 via its
+# port-mapping so external networks never see it.
+EXPOSE 5173
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

@@ -1,10 +1,42 @@
-version: "3.9"
+# trustC — full local stack via Docker Compose.
+#
+# All host port mappings are pinned to 127.0.0.1 so nothing is exposed to the
+# LAN and the bindings are IPv4-only (avoids the dual-stack `(::1)` quirk).
+# Service-to-service traffic stays on the internal `trustc` bridge network.
+#
+#   docker compose up -d                       # bring up everything
+#   docker compose up -d --build               # rebuild app images first
+#   docker compose logs -f gateway             # tail one service
+#   docker compose down                        # stop, keep volumes
+#   docker compose down -v && rm -rf deploy/data   # full reset
 
-# trustC — local development stack
-# Spins up Postgres (one cluster, schema-per-service), NATS (event bus), Redis.
-# Each microservice is then run via `make run-<svc>` or `docker compose up <svc>`.
+x-go-defaults: &go-defaults
+  restart: unless-stopped
+  environment: &go-env
+    TRUSTC_PG_DSN: postgres://trustc:trustc_dev@postgres:5432/trustc?sslmode=disable
+    TRUSTC_NATS_URL: nats://nats:4222
+    TRUSTC_JWT_SECRET: dev-secret-change-me
+    # Inter-service URLs use the Compose network DNS, not localhost.
+    TRUSTC_STARTUP_URL: http://startup:7001
+    TRUSTC_PROCUREMENT_URL: http://procurement:7002
+    TRUSTC_ESCROW_URL: http://escrow:7003
+    TRUSTC_LEDGER_URL: http://ledger:7004
+    TRUSTC_AUDIT_URL: http://audit:7005
+    TRUSTC_GOVERNANCE_URL: http://governance:7006
+    TRUSTC_ADMIN_URL: http://admin:7007
+    TRUSTC_AUTH_URL: http://auth:7008
+  depends_on:
+    postgres:
+      condition: service_healthy
+    nats:
+      condition: service_started
+    migrate:
+      condition: service_completed_successfully
+    seed:
+      condition: service_completed_successfully
 
 services:
+  # ─── Infrastructure ──────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: trustc-postgres
@@ -14,7 +46,7 @@ services:
       POSTGRES_PASSWORD: trustc_dev
       POSTGRES_DB: trustc
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - ./deploy/data/postgres:/var/lib/postgresql/data
       - ./db/migrations:/migrations:ro
@@ -24,6 +56,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    networks: [trustc]
 
   nats:
     image: nats:2.10-alpine
@@ -31,26 +64,29 @@ services:
     restart: unless-stopped
     command: ["-js", "-m", "8222"]
     ports:
-      - "4222:4222"
-      - "8222:8222"
+      - "127.0.0.1:4222:4222"
+      - "127.0.0.1:8222:8222"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
       interval: 5s
       timeout: 3s
       retries: 10
+    networks: [trustc]
 
   redis:
     image: redis:7-alpine
     container_name: trustc-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
+    networks: [trustc]
 
+  # ─── DB bootstrap (one-shot containers) ─────────────────────────────────
   migrate:
     image: postgres:16-alpine
     container_name: trustc-migrate
@@ -63,6 +99,7 @@ services:
       - ./db/migrations:/migrations:ro
       - ./deploy/run-migrations.sh:/run-migrations.sh:ro
     entrypoint: ["/bin/sh", "/run-migrations.sh"]
+    networks: [trustc]
 
   seed:
     image: postgres:16-alpine
@@ -75,7 +112,163 @@ services:
     volumes:
       - ./db/seed:/seed:ro
     entrypoint: >
-      sh -c "psql -h postgres -U trustc -d trustc -f /seed/seed.sql"
+      sh -c "psql -h postgres -U trustc -d trustc -v ON_ERROR_STOP=1 -f /seed/seed.sql"
+    networks: [trustc]
+
+  # ─── Go microservices ────────────────────────────────────────────────────
+  startup:
+    <<: *go-defaults
+    container_name: trustc-startup
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.go-service
+      args: { SERVICE: startup }
+    environment:
+      <<: *go-env
+      TRUSTC_STARTUP_ADDR: ":7001"
+    ports: ["127.0.0.1:7001:7001"]
+    networks: [trustc]
+
+  procurement:
+    <<: *go-defaults
+    container_name: trustc-procurement
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.go-service
+      args: { SERVICE: procurement }
+    environment:
+      <<: *go-env
+      TRUSTC_PROCUREMENT_ADDR: ":7002"
+    ports: ["127.0.0.1:7002:7002"]
+    networks: [trustc]
+
+  escrow:
+    <<: *go-defaults
+    container_name: trustc-escrow
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.go-service
+      args: { SERVICE: escrow }
+    environment:
+      <<: *go-env
+      TRUSTC_ESCROW_ADDR: ":7003"
+    ports: ["127.0.0.1:7003:7003"]
+    networks: [trustc]
+
+  ledger:
+    <<: *go-defaults
+    container_name: trustc-ledger
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.go-service
+      args: { SERVICE: ledger }
+    environment:
+      <<: *go-env
+      TRUSTC_LEDGER_ADDR: ":7004"
+    ports: ["127.0.0.1:7004:7004"]
+    networks: [trustc]
+
+  audit:
+    <<: *go-defaults
+    container_name: trustc-audit
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.go-service
+      args: { SERVICE: audit }
+    environment:
+      <<: *go-env
+      TRUSTC_AUDIT_ADDR: ":7005"
+    ports: ["127.0.0.1:7005:7005"]
+    networks: [trustc]
+
+  governance:
+    <<: *go-defaults
+    container_name: trustc-governance
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.go-service
+      args: { SERVICE: governance }
+    environment:
+      <<: *go-env
+      TRUSTC_GOVERNANCE_ADDR: ":7006"
+    ports: ["127.0.0.1:7006:7006"]
+    networks: [trustc]
+
+  admin:
+    <<: *go-defaults
+    container_name: trustc-admin
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.go-service
+      args: { SERVICE: admin }
+    environment:
+      <<: *go-env
+      TRUSTC_ADMIN_ADDR: ":7007"
+    ports: ["127.0.0.1:7007:7007"]
+    networks: [trustc]
+
+  auth:
+    <<: *go-defaults
+    container_name: trustc-auth
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.go-service
+      args: { SERVICE: auth }
+    environment:
+      <<: *go-env
+      TRUSTC_AUTH_ADDR: ":7008"
+    ports: ["127.0.0.1:7008:7008"]
+    networks: [trustc]
+
+  gateway:
+    <<: *go-defaults
+    container_name: trustc-gateway
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.go-service
+      args: { SERVICE: gateway }
+    environment:
+      <<: *go-env
+      TRUSTC_GATEWAY_ADDR: ":8080"
+    ports: ["127.0.0.1:8080:8080"]
+    networks: [trustc]
+    depends_on:
+      postgres:    { condition: service_healthy }
+      nats:        { condition: service_started }
+      migrate:     { condition: service_completed_successfully }
+      seed:        { condition: service_completed_successfully }
+      auth:        { condition: service_started }
+      admin:       { condition: service_started }
+      startup:     { condition: service_started }
+      procurement: { condition: service_started }
+      escrow:      { condition: service_started }
+      ledger:      { condition: service_started }
+      audit:       { condition: service_started }
+      governance:  { condition: service_started }
+
+  # ─── Frontend dev server ─────────────────────────────────────────────────
+  frontend:
+    container_name: trustc-frontend
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.frontend
+    environment:
+      # vite dev server proxies /v1, /auth, /api to this gateway URL.
+      VITE_GATEWAY_URL: http://gateway:8080
+    # Bind on 0.0.0.0 so the dev server is reachable from the LAN — anything
+    # else on the host network can hit http://<host-ip>:5173. The gateway is
+    # still pinned to 127.0.0.1 only, so external clients can only reach the
+    # backend through vite's proxy (which terminates in this container).
+    ports: ["0.0.0.0:5173:5173"]
+    depends_on:
+      gateway:
+        condition: service_started
+    networks: [trustc]
+
+networks:
+  trustc:
+    name: trustc
 
 volumes:
   postgres_data:
