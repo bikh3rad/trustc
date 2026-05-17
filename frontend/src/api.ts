@@ -125,12 +125,37 @@ export type EscrowAccount = {
 
 export const Escrow = {
   account: (startup_id: string) =>
-    call<EscrowAccount>(`/api/escrow/escrow/accounts/${startup_id}`),
+    call<EscrowAccount>(`/api/escrow/accounts/${startup_id}`),
   topup: (startup_id: string, amount_cents: number) =>
-    call<EscrowAccount>(`/api/escrow/escrow/accounts/${startup_id}/topup`, {
+    call<EscrowAccount>(`/api/escrow/accounts/${startup_id}/topup`, {
       method: "POST",
       body: JSON.stringify({ amount_cents }),
     }),
+};
+
+// ---- Ledger ----
+// EntrySummary shape returned by services/ledger GET /entries
+export type LedgerEntry = {
+  id: string;
+  transaction_id: string;
+  workflow_reference_id?: string;
+  description?: string;
+  posted_at: string;
+  total_cents: number;
+};
+
+export const Ledger = {
+  list: (params: { workflow_reference_id?: string } = {}) => {
+    const q = new URLSearchParams();
+    if (params.workflow_reference_id) q.set("workflow_reference_id", params.workflow_reference_id);
+    return call<{ entries: LedgerEntry[] }>(
+      `/api/ledger/entries${q.size ? `?${q.toString()}` : ""}`
+    );
+  },
+  balance: (code: string) =>
+    call<{ account_code: string; balance_cents: number }>(
+      `/api/ledger/accounts/${encodeURIComponent(code)}/balance`
+    ),
 };
 
 // ---- Audit ----

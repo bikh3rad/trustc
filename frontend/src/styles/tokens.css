@@ -1,0 +1,150 @@
+/* ============================================================
+   trustC — Design Tokens (Persian-adapted TRADE Protocol)
+   ------------------------------------------------------------
+   This file extends the TRADE Protocol design tokens for a
+   Persian/RTL financial OS. All variables follow the TRADE
+   naming convention so the design carries through cleanly.
+
+   For Claude Code handoff:
+   - Import this FIRST, before any component CSS.
+   - Use semantic aliases (--fg-default, --bg-paper) not raw
+     palette tokens (--navy-900) inside components.
+   - State chips read --state-* tokens via data-state="…".
+   ============================================================ */
+
+@import url("https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap");
+
+:root {
+  /* ---------- COLOR — anchors (from TRADE) ---------- */
+  --navy-900: #0E1B2C;
+  --navy-800: #15243A;
+  --navy-700: #1F2F47;
+  --navy-600: #2C3E5A;
+  --navy-500: #3F5474;
+
+  --orange-900: #5C2509;
+  --orange-800: #8B3A0E;
+  --orange-700: #B0561A;
+  --orange-600: #D2691E;
+  --orange-500: #E08544;
+  --orange-400: #ECA876;
+  --orange-100: #F8E4D2;
+
+  --cream-50:  #F7F2E8;
+  --cream-100: #EDE5D2;
+  --cream-200: #E0D6BD;
+  --cream-300: #C9C2B0;
+
+  --ink-900: #13182A;
+  --ink-800: #1F2538;
+  --ink-700: #2E3548;
+  --ink-600: #5B6376;
+  --ink-500: #7B8294;
+  --ink-400: #9BA1B0;
+  --ink-300: #BDC2CC;
+  --ink-200: #C9C2B0;
+  --ink-100: #E5E1D4;
+
+  /* ---------- State colors ---------- */
+  --state-active:    #1F6FE5;
+  --state-active-bg: #E4EDFA;
+  --state-good:      #2F7D4F;
+  --state-good-bg:   #E0EDE4;
+  --state-bad:       #A8312A;
+  --state-bad-bg:    #F4DEDC;
+  --state-warn:      #B8861F;
+  --state-warn-bg:   #F4E8C9;
+  --state-neutral:   #5B6376;
+  --state-neutral-bg:#E8E4D6;
+
+  /* ---------- Semantic aliases ---------- */
+  --bg-paper:       var(--cream-50);
+  --bg-paper-hover: var(--cream-100);
+  --bg-manifest:    var(--navy-900);
+  --bg-manifest-hover: var(--navy-700);
+  --bg-elevated:    #FFFFFF;
+  --bg-overlay:     rgba(14,27,44,0.45);
+
+  --fg-default:     var(--ink-900);
+  --fg-muted:       var(--ink-600);
+  --fg-faint:       var(--ink-500);
+  --fg-on-manifest: var(--cream-50);
+  --fg-on-manifest-muted: #9FA9BB;
+  --fg-action:      var(--orange-600);
+
+  --border-hairline: var(--ink-200);
+  --border-strong:   var(--ink-700);
+  --border-on-manifest: var(--navy-700);
+
+  --focus-ring: var(--orange-600);
+
+  /* ---------- TYPE — families (Persian primary) ---------- */
+  --sans-text:     "Vazirmatn", "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --serif-display: "Vazirmatn", "Source Serif 4", Georgia, serif;
+  --mono-data:     "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  /* ---------- TYPE — scale ---------- */
+  --t-xs:   0.75rem;
+  --t-sm:   0.875rem;
+  --t-md:   1rem;
+  --t-lg:   1.125rem;
+  --t-xl:   1.375rem;
+  --t-2xl:  1.75rem;
+  --t-3xl:  2.25rem;
+  --t-4xl:  3rem;
+  --t-5xl:  4rem;
+  --t-6xl:  5.5rem;
+
+  /* ---------- SPACING (4-px base) ---------- */
+  --s-1:  4px;  --s-2:  8px;  --s-3:  12px;
+  --s-4:  16px; --s-5:  20px; --s-6:  24px;
+  --s-8:  32px; --s-10: 40px; --s-12: 48px;
+  --s-16: 64px; --s-20: 80px; --s-24: 96px;
+  --s-32: 128px;
+
+  /* ---------- RADII ---------- */
+  --r-0: 0;  --r-1: 2px;  --r-2: 4px;  --r-3: 8px;  --r-pill: 999px;
+
+  /* ---------- SHADOWS ---------- */
+  --shadow-1: 0 1px 0 rgba(19,24,42,0.06), 0 1px 2px rgba(19,24,42,0.04);
+  --shadow-2: 0 12px 24px -8px rgba(14,27,44,0.16), 0 0 0 1px rgba(19,24,42,0.06);
+  --shadow-inset: inset 0 0 0 1px rgba(19,24,42,0.06);
+
+  /* ---------- MOTION ---------- */
+  --ease-document: cubic-bezier(0.2, 0.65, 0.2, 1);
+  --ease-mech:     cubic-bezier(0.5, 0, 0.5, 1);
+  --dur-1: 120ms; --dur-2: 200ms; --dur-3: 320ms; --dur-4: 480ms;
+
+  /* ---------- Density (Tweaks) ---------- */
+  --row-pad-y: 12px;   /* 'comfortable' default; 'dense' overrides to 6px */
+}
+
+/* density: dense */
+:root[data-density="dense"] {
+  --row-pad-y: 6px;
+}
+
+/* dark / manifest mode */
+:root[data-theme="dark"] {
+  --bg-paper:       var(--navy-900);
+  --bg-paper-hover: var(--navy-800);
+  --bg-elevated:    var(--navy-800);
+  --fg-default:     var(--cream-50);
+  --fg-muted:       #9FA9BB;
+  --fg-faint:       #6F7787;
+  --border-hairline: var(--navy-700);
+  --border-strong:   var(--navy-500);
+  --state-active-bg: #16263F;
+  --state-good-bg:   #163022;
+  --state-bad-bg:    #3A1714;
+  --state-warn-bg:   #2D2210;
+  --state-neutral-bg:#1B2438;
+}
+
+/* ---------- Motion guard ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

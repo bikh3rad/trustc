@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="fa" data-density="comfortable" data-theme="light" data-numerals="fa-mixed">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>trustC · سیستم‌عامل مالی استارتاپ‌ها</title>
+
+  <!-- ============================================================
+       trustC — Persian-RTL interactive prototype
+       For Claude Code:
+       - tokens.css → CSS variables (TRADE-adapted, Persian-aware)
+       - styles.css → global RTL + component styles
+       - data.js    → mock data (replace with API responses)
+       - utils.js   → number formatting + i18n helpers
+       - components.jsx → Stat, Chip, FSM, Modal, Btn, …
+       - Shell.jsx  → Sidebar, Topbar (persona switching)
+       - founder-screens.jsx + founder-screens-2.jsx
+       - vc-screens.jsx
+       - auditor-screens.jsx
+       - App.jsx    → root + routing + tweaks state
+       ============================================================ -->
+
+  <link rel="stylesheet" href="src/tokens.css" />
+  <link rel="stylesheet" href="src/styles.css" />
+
+  <!-- Pinned React + Babel (do not bump versions) -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <!-- Data + utilities (vanilla JS, must load before JSX) -->
+  <script src="src/data.js"></script>
+  <script src="src/utils.js"></script>
+
+  <!-- Shared UI components, then screens, then App -->
+  <script type="text/babel" data-presets="react" src="src/components.jsx"></script>
+  <script type="text/babel" data-presets="react" src="src/Shell.jsx"></script>
+  <script type="text/babel" data-presets="react" src="src/founder-screens.jsx"></script>
+  <script type="text/babel" data-presets="react" src="src/founder-screens-2.jsx"></script>
+  <script type="text/babel" data-presets="react" src="src/vc-screens.jsx"></script>
+  <script type="text/babel" data-presets="react" src="src/auditor-screens.jsx"></script>
+  <script type="text/babel" data-presets="react" src="src/tweaks-panel.jsx"></script>
+  <script type="text/babel" data-presets="react" src="src/App.jsx"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- Bundler thumbnail (used by the standalone-html bundler if invoked) -->
+  <template id="__bundler_thumbnail">
+    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100" height="100" fill="#F7F2E8"/>
+      <rect x="30" y="30" width="40" height="40" fill="#0E1B2C"/>
+      <text x="50" y="58" text-anchor="middle" font-family="IBM Plex Mono, monospace"
+            font-weight="700" font-size="18" fill="#D2691E">tC</text>
+    </svg>
+  </template>
+</body>
+</html>
