@@ -1,0 +1,12 @@
+go 1.22
+
+use (
+	./services/shared
+	./services/gateway
+	./services/startup
+	./services/procurement
+	./services/escrow
+	./services/ledger
+	./services/audit
+	./services/governance
+)
