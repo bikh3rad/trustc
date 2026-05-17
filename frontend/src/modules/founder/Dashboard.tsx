@@ -13,7 +13,10 @@ import { Chip } from "../../components/ui/Chip";
 import { Icon } from "../../components/ui/Icon";
 import { Stat } from "../../components/ui/Stat";
 import { useCurrentStartup } from "../../context/CurrentStartupContext";
+import { MobileCard } from "../../layout/mobile/MobileCard";
+import { MobileList } from "../../layout/mobile/MobileList";
 import { formatIRR, toFaDigits } from "../../lib/format";
+import { useIsMobile } from "../../lib/useIsMobile";
 import { isInflight } from "../../lib/fsm";
 
 function AlertRow({
@@ -63,6 +66,7 @@ function eventBody(r: AuditRecord): { tone: "active" | "good" | "warn"; title: s
 export function Dashboard() {
   const navigate = useNavigate();
   const { current } = useCurrentStartup();
+  const isMobile = useIsMobile();
   const [procs, setProcs] = useState<Procurement[]>([]);
   const [account, setAccount] = useState<EscrowAccount | null>(null);
   const [audit, setAudit] = useState<AuditRecord[]>([]);
@@ -106,15 +110,7 @@ export function Dashboard() {
 
   return (
     <div className="stack" style={{ gap: "var(--s-6)" }}>
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 320px",
-          gap: "var(--s-6)",
-          alignItems: "end",
-          padding: "var(--s-6) 0",
-        }}
-      >
+      <section className="dashboard-hero">
         <div>
           <div className="eyebrow" style={{ marginBottom: 12 }}>
             داشبورد · {toFaDigits(new Date().toLocaleDateString("fa-IR"))}
@@ -137,7 +133,7 @@ export function Dashboard() {
             در اسکرو قفل شده.
           </p>
         </div>
-        <div style={{ textAlign: "end" }}>
+        <div className="dashboard-hero-cta">
           <Btn
             variant="primary"
             icon={<Icon.plus />}
@@ -157,7 +153,7 @@ export function Dashboard() {
         </div>
       )}
 
-      <section className="grid" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+      <section className="grid stat-grid">
         <Stat
           label="موجودی اسکرو"
           value={
@@ -205,45 +201,67 @@ export function Dashboard() {
               مشاهده همه ←
             </Btn>
           </div>
-          <div className="responsive-table-card">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>عنوان</th>
-                <th>تأمین‌کننده</th>
-                <th>وضعیت</th>
-                <th className="num">مبلغ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {inflight.slice(0, 5).map((p) => (
-                <tr key={p.id} onClick={() => navigate(`/procurements/${p.id}`)}>
-                  <td>
-                    <div style={{ fontWeight: 500 }}>{p.title}</div>
-                    <div className="muted mono" style={{ fontSize: 11 }}>
-                      {p.id.slice(0, 8)}
-                    </div>
-                  </td>
-                  <td>{p.supplier_name}</td>
-                  <td>
-                    <Chip state={p.state} />
-                  </td>
-                  <td className="num">{formatIRR(p.amount_cents)}</td>
-                </tr>
-              ))}
-              {inflight.length === 0 && (
-                <tr>
-                  <td colSpan={4}>
-                    <div className="empty">
-                      <h3>هیچ خرید فعالی نیست</h3>
-                      <div>برای شروع، خرید جدید ثبت کنید.</div>
-                    </div>
-                  </td>
-                </tr>
+          {isMobile ? (
+            <MobileList
+              items={inflight.slice(0, 5)}
+              emptyTitle="هیچ خرید فعالی نیست"
+              emptyHint="برای شروع، خرید جدید ثبت کنید."
+              renderItem={(p) => (
+                <MobileCard
+                  key={p.id}
+                  onClick={() => navigate(`/procurements/${p.id}`)}
+                  title={p.title}
+                  subtitle={p.supplier_name}
+                  right={<Chip state={p.state} />}
+                  meta={
+                    <span style={{ fontWeight: 600, color: "var(--fg-default)" }}>
+                      {formatIRR(p.amount_cents)}
+                    </span>
+                  }
+                />
               )}
-            </tbody>
-          </table>
-          </div>
+            />
+          ) : (
+            <div className="responsive-table-card">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>عنوان</th>
+                    <th>تأمین‌کننده</th>
+                    <th>وضعیت</th>
+                    <th className="num">مبلغ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {inflight.slice(0, 5).map((p) => (
+                    <tr key={p.id} onClick={() => navigate(`/procurements/${p.id}`)}>
+                      <td>
+                        <div style={{ fontWeight: 500 }}>{p.title}</div>
+                        <div className="muted mono" style={{ fontSize: 11 }}>
+                          {p.id.slice(0, 8)}
+                        </div>
+                      </td>
+                      <td>{p.supplier_name}</td>
+                      <td>
+                        <Chip state={p.state} />
+                      </td>
+                      <td className="num">{formatIRR(p.amount_cents)}</td>
+                    </tr>
+                  ))}
+                  {inflight.length === 0 && (
+                    <tr>
+                      <td colSpan={4}>
+                        <div className="empty">
+                          <h3>هیچ خرید فعالی نیست</h3>
+                          <div>برای شروع، خرید جدید ثبت کنید.</div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         <div className="card">

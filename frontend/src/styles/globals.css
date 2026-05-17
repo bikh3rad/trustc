@@ -423,6 +423,18 @@ button { font-family: inherit; }
   z-index: 100;
   padding: var(--s-6);
 }
+@media (max-width: 640px) {
+  .modal-overlay { padding: var(--s-3); align-items: flex-end; }
+  .modal { border-radius: var(--r-2); }
+  .modal-head, .modal-foot { padding: var(--s-4) var(--s-4); }
+  .modal-body { padding: var(--s-4); }
+  /* Stack footer buttons full-width on phones. */
+  .modal-foot {
+    flex-direction: column-reverse;
+    gap: var(--s-2);
+  }
+  .modal-foot .btn { width: 100%; justify-content: center; }
+}
 .modal {
   background: var(--bg-elevated);
   border: 1px solid var(--border-hairline);
@@ -696,6 +708,20 @@ button { font-family: inherit; }
   width: 24px;
 }
 .queue-item .name { font-weight: 600; }
+/* Mobile: drop the 4-col grid and let score+amount wrap onto a second row. */
+@media (max-width: 640px) {
+  .queue-item {
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+  }
+  .queue-item > :nth-child(3),
+  .queue-item > :nth-child(4) {
+    grid-column: 1 / -1;
+    justify-self: end;
+    text-align: end;
+  }
+  .queue-item > :nth-child(3) { justify-self: start; }
+}
 .queue-item.flying {
   animation: fly 800ms var(--ease-document);
   background: var(--orange-100);
@@ -1290,4 +1316,88 @@ button { font-family: inherit; }
   .btn { padding: 14px 16px; }
   .btn--sm { padding: 10px 12px; }
   .input, .select, .textarea { font-size: 16px; }
+}
+
+/* ============================================================
+   Dashboard hero — title row on the left, CTA on the right.
+   Collapses to a single column on ≤640px with a full-width CTA.
+   ============================================================ */
+.dashboard-hero {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: var(--s-6);
+  align-items: end;
+  padding: var(--s-6) 0;
+}
+.dashboard-hero-cta { text-align: end; }
+.dashboard-hero-cta .btn { display: inline-flex; }
+@media (max-width: 640px) {
+  .dashboard-hero {
+    grid-template-columns: 1fr;
+    padding: var(--s-4) 0;
+  }
+  .dashboard-hero-cta { text-align: start; }
+  .dashboard-hero-cta .btn { width: 100%; justify-content: center; }
+}
+
+/* ============================================================
+   Escrow legal/tax flow — 5-column desktop (pillar → arrow → pillar
+   → arrow → pillar), collapses to vertical with rotated arrows on
+   mobile so it stays a flow diagram instead of three orphan boxes.
+   ============================================================ */
+.escrow-flow {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
+}
+.escrow-flow-arrow {
+  font-family: var(--mono-data);
+  color: var(--orange-500);
+  text-align: center;
+  font-size: 24px;
+  line-height: 1;
+}
+@media (max-width: 760px) {
+  .escrow-flow {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .escrow-flow-arrow {
+    /* Rotate 90° so the arrow points top-to-bottom in the vertical stack.
+       RTL doesn't flip vertical arrows — both directions look the same. */
+    transform: rotate(-90deg);
+    padding: 4px 0;
+  }
+}
+
+/* KillSwitch — two equal columns on desktop, single column on tablet/mobile. */
+.kill-grid {
+  grid-template-columns: 1fr 1fr;
+}
+@media (max-width: 1000px) {
+  .kill-grid { grid-template-columns: 1fr; }
+}
+
+/* Procurement detail — header has title cluster on the left and action
+   buttons on the right; on tablet/mobile they stack with full-width
+   action buttons. Main content grid is 1fr / 360px sidebar that collapses. */
+.proc-detail-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: start;
+  gap: var(--s-4);
+}
+.proc-detail-actions { flex-shrink: 0; }
+@media (max-width: 760px) {
+  .proc-detail-header { flex-direction: column; align-items: stretch; }
+  .proc-detail-actions { width: 100%; }
+  .proc-detail-actions .btn { flex: 1; justify-content: center; }
+}
+.proc-detail-grid {
+  grid-template-columns: 1fr 360px;
+}
+@media (max-width: 1000px) {
+  .proc-detail-grid { grid-template-columns: 1fr; }
 }

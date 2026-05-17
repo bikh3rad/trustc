@@ -3,7 +3,9 @@ import { Audit as AuditApi, type AuditRecord } from "../../api";
 import { Chip } from "../../components/ui/Chip";
 import { Icon } from "../../components/ui/Icon";
 import { Stat } from "../../components/ui/Stat";
+import { MobileList } from "../../layout/mobile/MobileList";
 import { toFaDigits } from "../../lib/format";
+import { useIsMobile } from "../../lib/useIsMobile";
 
 const ROLE_FILTERS: [string, string][] = [
   ["ALL", "همه"],
@@ -26,6 +28,7 @@ function roleTone(role: string | undefined): "active" | "neutral" | "good" | "wa
 }
 
 export function Audit() {
+  const isMobile = useIsMobile();
   const [records, setRecords] = useState<AuditRecord[]>([]);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("ALL");
@@ -87,7 +90,7 @@ export function Audit() {
         </div>
       )}
 
-      <section className="grid" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+      <section className="grid stat-grid">
         <Stat label="کل رویدادها" value={toFaDigits(stats.total)} unit="مورد" />
         <Stat
           label="در ۲۴ ساعت اخیر"
@@ -99,15 +102,15 @@ export function Audit() {
         <Stat label="مداخلات VC" value={toFaDigits(stats.vc)} unit="مورد" />
       </section>
 
-      <div className="row" style={{ gap: 12 }}>
+      <div className="row wrap" style={{ gap: 12 }}>
         <input
           className="input"
-          style={{ maxWidth: 320 }}
+          style={{ maxWidth: 320, flex: "1 1 240px" }}
           placeholder="جست‌وجو در رویدادها…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <div className="seg">
+        <div className="seg" style={{ flexWrap: "wrap" }}>
           {ROLE_FILTERS.map(([k, l]) => (
             <button
               key={k}
@@ -120,6 +123,89 @@ export function Audit() {
         </div>
       </div>
 
+      {isMobile ? (
+        <MobileList
+          items={filtered}
+          emptyTitle="چیزی پیدا نشد"
+          renderItem={(r) => (
+            <div
+              key={r.event_id}
+              className="mobile-card"
+              style={{ cursor: "pointer" }}
+              onClick={() =>
+                setExpanded(expanded === r.event_id ? null : r.event_id)
+              }
+            >
+              <div
+                className="row"
+                style={{
+                  justifyContent: "space-between",
+                  alignItems: "start",
+                  gap: 12,
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div className="mono" style={{ fontWeight: 600, fontSize: 13 }}>
+                    {actionLabelEn(r.event_type)}
+                  </div>
+                  <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>
+                    {r.service}
+                    {r.subject_type
+                      ? ` · ${r.subject_type}/${(r.subject_id ?? "").slice(0, 8)}`
+                      : ""}
+                  </div>
+                </div>
+                <Chip tone={roleTone(r.actor_role)}>
+                  <span className="mono">{r.actor_role ?? "—"}</span>
+                </Chip>
+              </div>
+              <div className="mobile-card-meta">
+                <span>
+                  {toFaDigits(new Date(r.recorded_at).toLocaleString("fa-IR"))}
+                </span>
+                <span
+                  style={{
+                    marginInlineStart: "auto",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                >
+                  <Icon.hash size={12} />
+                  {r.signature.slice(0, 10)}…
+                </span>
+              </div>
+              {expanded === r.event_id && (
+                <pre
+                  style={{
+                    background: "var(--bg-paper)",
+                    padding: 8,
+                    marginTop: 8,
+                    fontFamily: "var(--mono-data)",
+                    fontSize: 10,
+                    overflowX: "auto",
+                    borderRadius: 4,
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {JSON.stringify(
+                    {
+                      event_id: r.event_id,
+                      seq: r.seq,
+                      request_id: r.request_id,
+                      previous_hash: r.previous_hash,
+                      signature: r.signature,
+                      payload: r.payload,
+                    },
+                    null,
+                    2,
+                  )}
+                </pre>
+              )}
+            </div>
+          )}
+        />
+      ) : (
       <div className="card responsive-table-card" style={{ padding: 0 }}>
         <table className="table">
           <thead>
@@ -215,6 +301,7 @@ export function Audit() {
           </tbody>
         </table>
       </div>
+      )}
 
       <div
         className="card flat"

@@ -91,10 +91,7 @@ export function Recycling() {
 
   return (
     <div className="stack" style={{ gap: "var(--s-6)" }}>
-      <header
-        className="row"
-        style={{ justifyContent: "space-between", alignItems: "end" }}
-      >
+      <header className="dashboard-hero">
         <div>
           <div className="eyebrow">پورتفولیو · موتور اهرم‌سازی</div>
           <h1>صف بازیافت سرمایه</h1>
@@ -108,9 +105,11 @@ export function Recycling() {
             ⚠ سرویس backend برای موتور اعتبار/بازیافت هنوز پیاده‌سازی نشده — امتیاز نمایشی.
           </p>
         </div>
-        <Btn variant="primary" icon={<Icon.recycle />} onClick={runCycle}>
-          اجرای چرخه بازیافت
-        </Btn>
+        <div className="dashboard-hero-cta">
+          <Btn variant="primary" icon={<Icon.recycle />} onClick={runCycle}>
+            اجرای چرخه بازیافت
+          </Btn>
+        </div>
       </header>
 
       {err && (
@@ -122,7 +121,7 @@ export function Recycling() {
         </div>
       )}
 
-      <section className="grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+      <section className="grid stat-grid stat-grid--3">
         <Stat
           label="کل در صف"
           value={formatIRR(totalQueued, { withUnit: false })}
@@ -188,12 +187,8 @@ export function Recycling() {
       <div className="card flat">
         <div className="eyebrow">نحوه عملکرد</div>
         <div
-          className="grid"
-          style={{
-            gridTemplateColumns: "repeat(3, 1fr)",
-            marginTop: 12,
-            gap: 24,
-          }}
+          className="grid stat-grid stat-grid--3"
+          style={{ marginTop: 12, gap: 24 }}
         >
           <Explain
             n="۰۱"

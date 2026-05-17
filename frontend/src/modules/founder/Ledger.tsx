@@ -63,7 +63,7 @@ export function Ledger() {
         </div>
       )}
 
-      <section className="grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+      <section className="grid stat-grid stat-grid--3">
         <Stat
           label="جمع بدهکار"
           value={formatIRR(totalDebit, { withUnit: false })}

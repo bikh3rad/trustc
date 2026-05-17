@@ -53,10 +53,7 @@ export function Procurements() {
 
   return (
     <div className="stack" style={{ gap: "var(--s-6)" }}>
-      <header
-        className="row"
-        style={{ justifyContent: "space-between", alignItems: "end" }}
-      >
+      <header className="dashboard-hero">
         <div>
           <div className="eyebrow">عملیات · خرید</div>
           <h1>خریدها</h1>
@@ -64,13 +61,15 @@ export function Procurements() {
             {toFaDigits(items.length)} درخواست در ۹۰ روز گذشته
           </p>
         </div>
-        <Btn
-          variant="primary"
-          icon={<Icon.plus />}
-          onClick={() => navigate("/procurements/new")}
-        >
-          ثبت خرید جدید
-        </Btn>
+        <div className="dashboard-hero-cta">
+          <Btn
+            variant="primary"
+            icon={<Icon.plus />}
+            onClick={() => navigate("/procurements/new")}
+          >
+            ثبت خرید جدید
+          </Btn>
+        </div>
       </header>
 
       {err && (

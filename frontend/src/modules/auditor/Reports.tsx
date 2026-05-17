@@ -24,10 +24,7 @@ export function Reports() {
 
   return (
     <div className="stack" style={{ gap: "var(--s-6)" }}>
-      <header
-        className="row"
-        style={{ justifyContent: "space-between", alignItems: "end" }}
-      >
+      <header className="dashboard-hero">
         <div>
           <div className="eyebrow">حسابرسی · گزارش‌ها</div>
           <h1>گزارش‌های مالی</h1>
@@ -36,7 +33,7 @@ export function Reports() {
             (در فاز ۱: نمایشی).
           </p>
         </div>
-        <div className="row" style={{ gap: 8 }}>
+        <div className="row wrap" style={{ gap: 8 }}>
           <select
             className="select"
             style={{ width: 220 }}

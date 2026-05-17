@@ -70,10 +70,7 @@ export function Invoices() {
 
   return (
     <div className="stack" style={{ gap: "var(--s-6)" }}>
-      <header
-        className="row"
-        style={{ justifyContent: "space-between", alignItems: "end" }}
-      >
+      <header className="dashboard-hero">
         <div>
           <div className="eyebrow">عملیات · فروش</div>
           <h1>فاکتورهای فروش</h1>
@@ -87,12 +84,14 @@ export function Invoices() {
             ⚠ سرویس backend برای فاکتورها هنوز پیاده‌سازی نشده — داده نمایشی است.
           </p>
         </div>
-        <Btn variant="primary" icon={<Icon.plus />} onClick={() => setShowNew(true)}>
-          صدور فاکتور جدید
-        </Btn>
+        <div className="dashboard-hero-cta">
+          <Btn variant="primary" icon={<Icon.plus />} onClick={() => setShowNew(true)}>
+            صدور فاکتور جدید
+          </Btn>
+        </div>
       </header>
 
-      <section className="grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+      <section className="grid stat-grid stat-grid--3">
         <Stat
           label="مطالبات باز"
           value={formatIRR(totalOpen, { withUnit: false })}

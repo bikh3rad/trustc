@@ -99,14 +99,7 @@ export function AdminOverview() {
 
   return (
     <div className="stack" style={{ gap: "var(--s-6)" }}>
-      <header
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr auto",
-          gap: "var(--s-6)",
-          alignItems: "end",
-        }}
-      >
+      <header className="dashboard-hero">
         <div>
           <div className="eyebrow">مدیریت سیستم · نمای کلی</div>
           <h1>کنسول ادمین</h1>
@@ -114,7 +107,7 @@ export function AdminOverview() {
             دید کلی به وضعیت پلتفرم. کاربران، استارتاپ‌ها و فعالیت‌های اخیر در یک نگاه.
           </p>
         </div>
-        <div className="row" style={{ gap: 8 }}>
+        <div className="dashboard-hero-cta">
           {pending.length > 0 && (
             <Btn
               variant="primary"

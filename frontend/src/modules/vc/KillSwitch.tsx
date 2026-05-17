@@ -133,7 +133,7 @@ export function KillSwitch() {
         </div>
       </div>
 
-      <div className="grid two-col-shrink" style={{ gridTemplateColumns: "1fr 1fr", gap: "var(--s-6)" }}>
+      <div className="grid kill-grid" style={{ gap: "var(--s-6)" }}>
         <div className="card">
           <div className="card-title">
             <h3>استارتاپ‌های فعال</h3>

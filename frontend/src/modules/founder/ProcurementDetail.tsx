@@ -110,11 +110,8 @@ export function ProcurementDetail() {
 
   return (
     <div className="stack" style={{ gap: "var(--s-6)" }}>
-      <header
-        className="row"
-        style={{ justifyContent: "space-between", alignItems: "start" }}
-      >
-        <div>
+      <header className="proc-detail-header">
+        <div style={{ minWidth: 0 }}>
           <button
             className="btn btn--ghost btn--sm"
             onClick={() => navigate("/procurements")}
@@ -125,14 +122,14 @@ export function ProcurementDetail() {
             {proc.id.slice(0, 8)}
           </div>
           <h1 style={{ marginTop: 4 }}>{proc.title}</h1>
-          <div className="row" style={{ gap: 8, marginTop: 8 }}>
+          <div className="row wrap" style={{ gap: 8, marginTop: 8 }}>
             <Chip state={proc.state} />
             <span className="muted mono" style={{ fontSize: 12 }}>
               {proc.supplier_name} · {proc.category}
             </span>
           </div>
         </div>
-        <div className="row" style={{ gap: 12 }}>
+        <div className="row wrap proc-detail-actions" style={{ gap: 12 }}>
           {advance ? (
             <Btn
               variant="primary"
@@ -177,8 +174,8 @@ export function ProcurementDetail() {
       )}
 
       <section
-        className="grid"
-        style={{ gridTemplateColumns: "1fr 360px", gap: "var(--s-6)" }}
+        className="grid proc-detail-grid"
+        style={{ gap: "var(--s-6)" }}
       >
         <div className="stack" style={{ gap: "var(--s-4)" }}>
           <div className="card">

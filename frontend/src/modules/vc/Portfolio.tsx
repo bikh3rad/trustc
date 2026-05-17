@@ -89,14 +89,7 @@ export function Portfolio() {
 
   return (
     <div className="stack" style={{ gap: "var(--s-6)" }}>
-      <header
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 320px",
-          gap: "var(--s-6)",
-          alignItems: "end",
-        }}
-      >
+      <header className="dashboard-hero">
         <div>
           <div className="eyebrow">پورتفولیو · کنترل زنده</div>
           <h1 style={{ fontSize: "var(--t-3xl)" }}>صندوق سرمایه‌گذاری trustC</h1>
@@ -126,7 +119,7 @@ export function Portfolio() {
         </div>
       )}
 
-      <section className="grid" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+      <section className="grid stat-grid">
         <Stat
           label="کل اسکرو فعال"
           value={formatIRR(totals.escrow, { withUnit: false })}
@@ -173,7 +166,7 @@ export function Portfolio() {
             </div>
           </div>
           <div
-            className="row"
+            className="row wrap"
             style={{ gap: 12, fontSize: 11, fontFamily: "var(--mono-data)" }}
           >
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -190,10 +183,7 @@ export function Portfolio() {
             </span>
           </div>
         </div>
-        <div
-          className="grid"
-          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}
-        >
+        <div className="grid heat-grid">
           {startups.map((s) => {
             const frozen = isFrozen(s.id);
             const account = accounts.get(s.id);

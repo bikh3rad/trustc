@@ -10,8 +10,11 @@ import { Chip } from "../../components/ui/Chip";
 import { ProgressBar } from "../../components/ui/ProgressBar";
 import { Stat } from "../../components/ui/Stat";
 import { useCurrentStartup } from "../../context/CurrentStartupContext";
+import { MobileCard } from "../../layout/mobile/MobileCard";
+import { MobileList } from "../../layout/mobile/MobileList";
 import { formatIRR, formatIRRPlain, stateIndex, toFaDigits } from "../../lib/format";
 import { isEscrowLocked, PROCUREMENT_STATES } from "../../lib/fsm";
+import { useIsMobile } from "../../lib/useIsMobile";
 
 function Pillar({
   title,
@@ -55,6 +58,7 @@ function Pillar({
 export function Escrow() {
   const navigate = useNavigate();
   const { current } = useCurrentStartup();
+  const isMobile = useIsMobile();
   const [account, setAccount] = useState<EscrowAccount | null>(null);
   const [procs, setProcs] = useState<Procurement[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -102,7 +106,7 @@ export function Escrow() {
         </div>
       )}
 
-      <section className="grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+      <section className="grid stat-grid stat-grid--3">
         <Stat
           label="قفل‌شده در خریدها"
           value={formatIRR(totalLocked, { withUnit: false })}
@@ -142,23 +146,16 @@ export function Escrow() {
         <div className="eyebrow" style={{ color: "var(--orange-500)", marginBottom: 16 }}>
           تفکیک حقوقی-مالیاتی
         </div>
-        <div
-          className="grid"
-          style={{
-            gridTemplateColumns: "1fr auto 1fr auto 1fr",
-            alignItems: "center",
-            gap: 16,
-          }}
-        >
+        <div className="escrow-flow">
           <Pillar title="مشتری" subtitle="پرداخت‌کننده" mono="CUSTOMER" />
-          <div style={{ fontFamily: "var(--mono-data)", color: "var(--orange-500)", textAlign: "center", fontSize: 24 }}>←</div>
+          <div className="escrow-flow-arrow">←</div>
           <Pillar
             title="حساب امانی"
             subtitle="وجوه امانی مأخوذه"
             mono="2103_FIDUCIARY_ESCROW"
             highlight
           />
-          <div style={{ fontFamily: "var(--mono-data)", color: "var(--orange-500)", textAlign: "center", fontSize: 24 }}>←</div>
+          <div className="escrow-flow-arrow">←</div>
           <Pillar title="تأمین‌کننده" subtitle="ذی‌نفع نهایی" mono="SUPPLIER" />
         </div>
         <p style={{ color: "var(--fg-on-manifest-muted)", fontSize: 13, marginTop: 16 }}>
@@ -174,7 +171,7 @@ export function Escrow() {
           style={{ padding: "var(--s-5)", marginBottom: 0 }}
         >
           <h3>قفل‌های فعال اسکرو</h3>
-          <div className="row" style={{ gap: 8, fontSize: 12 }}>
+          <div className="row wrap" style={{ gap: 8, fontSize: 12 }}>
             <span className="row" style={{ gap: 6 }}>
               <span
                 style={{
@@ -199,55 +196,95 @@ export function Escrow() {
             </span>
           </div>
         </div>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>خرید</th>
-              <th>تأمین‌کننده</th>
-              <th>وضعیت</th>
-              <th className="num">مبلغ قفل</th>
-              <th>پیشرفت</th>
-            </tr>
-          </thead>
-          <tbody>
-            {procs.map((p) => {
-              const ci = stateIndex(p.state);
-              const total = PROCUREMENT_STATES.length;
-              const pct = ((ci - 2) / (total - 3)) * 100;
-              return (
-                <tr key={p.id} onClick={() => navigate(`/procurements/${p.id}`)}>
-                  <td>
-                    <div style={{ fontWeight: 500 }}>{p.title}</div>
-                    <div className="muted mono" style={{ fontSize: 11 }}>
-                      {p.id.slice(0, 8)}
+        {isMobile ? (
+          <div style={{ padding: "0 var(--s-4) var(--s-4)" }}>
+            <MobileList
+              items={procs}
+              emptyTitle="هیچ قفلی فعال نیست"
+              emptyHint="زمانی که خریدی به مرحله ESCROW_LOCK برسد، اینجا نمایش داده می‌شود."
+              renderItem={(p) => {
+                const ci = stateIndex(p.state);
+                const total = PROCUREMENT_STATES.length;
+                const pct = ((ci - 2) / (total - 3)) * 100;
+                return (
+                  <MobileCard
+                    key={p.id}
+                    onClick={() => navigate(`/procurements/${p.id}`)}
+                    title={p.title}
+                    subtitle={p.supplier_name}
+                    right={<Chip state={p.state} />}
+                    meta={
+                      <div className="stack" style={{ gap: 6, width: "100%" }}>
+                        <div className="row" style={{ justifyContent: "space-between" }}>
+                          <span style={{ fontWeight: 600, color: "var(--fg-default)" }}>
+                            {formatIRRPlain(p.amount_cents)} ریال
+                          </span>
+                          <span className="mono">
+                            {toFaDigits(Math.max(0, Math.min(100, Math.round(pct))))}%
+                          </span>
+                        </div>
+                        <ProgressBar
+                          value={pct}
+                          tone={p.state === "PAYMENT_RELEASE" ? "good" : "active"}
+                        />
+                      </div>
+                    }
+                  />
+                );
+              }}
+            />
+          </div>
+        ) : (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>خرید</th>
+                <th>تأمین‌کننده</th>
+                <th>وضعیت</th>
+                <th className="num">مبلغ قفل</th>
+                <th>پیشرفت</th>
+              </tr>
+            </thead>
+            <tbody>
+              {procs.map((p) => {
+                const ci = stateIndex(p.state);
+                const total = PROCUREMENT_STATES.length;
+                const pct = ((ci - 2) / (total - 3)) * 100;
+                return (
+                  <tr key={p.id} onClick={() => navigate(`/procurements/${p.id}`)}>
+                    <td>
+                      <div style={{ fontWeight: 500 }}>{p.title}</div>
+                      <div className="muted mono" style={{ fontSize: 11 }}>
+                        {p.id.slice(0, 8)}
+                      </div>
+                    </td>
+                    <td>{p.supplier_name}</td>
+                    <td>
+                      <Chip state={p.state} />
+                    </td>
+                    <td className="num">{formatIRRPlain(p.amount_cents)}</td>
+                    <td style={{ minWidth: 180 }}>
+                      <ProgressBar
+                        value={pct}
+                        tone={p.state === "PAYMENT_RELEASE" ? "good" : "active"}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+              {procs.length === 0 && (
+                <tr>
+                  <td colSpan={5}>
+                    <div className="empty">
+                      <h3>هیچ قفلی فعال نیست</h3>
+                      <div>زمانی که خریدی به مرحله ESCROW_LOCK برسد، اینجا نمایش داده می‌شود.</div>
                     </div>
                   </td>
-                  <td>{p.supplier_name}</td>
-                  <td>
-                    <Chip state={p.state} />
-                  </td>
-                  <td className="num">{formatIRRPlain(p.amount_cents)}</td>
-                  <td style={{ minWidth: 180 }}>
-                    <ProgressBar
-                      value={pct}
-                      tone={p.state === "PAYMENT_RELEASE" ? "good" : "active"}
-                    />
-                  </td>
                 </tr>
-              );
-            })}
-            {procs.length === 0 && (
-              <tr>
-                <td colSpan={5}>
-                  <div className="empty">
-                    <h3>هیچ قفلی فعال نیست</h3>
-                    <div>زمانی که خریدی به مرحله ESCROW_LOCK برسد، اینجا نمایش داده می‌شود.</div>
-                  </div>
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );
