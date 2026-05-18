@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Audit as AuditApi,
@@ -12,12 +12,15 @@ import { Btn } from "../../components/ui/Btn";
 import { Chip } from "../../components/ui/Chip";
 import { Icon } from "../../components/ui/Icon";
 import { Stat } from "../../components/ui/Stat";
+import { BarPair, DualLine, ScoreLine } from "../../components/ui/Charts";
 import { useCurrentStartup } from "../../context/CurrentStartupContext";
 import { MobileCard } from "../../layout/mobile/MobileCard";
 import { MobileList } from "../../layout/mobile/MobileList";
-import { formatIRR, toFaDigits } from "../../lib/format";
+import { formatIRR, formatPercent, toFaDigits } from "../../lib/format";
 import { useIsMobile } from "../../lib/useIsMobile";
 import { isInflight } from "../../lib/fsm";
+import { computeStartupMonthly } from "../../lib/monthly";
+import { mockInvoicesFor } from "../../lib/mockInvoices";
 
 function AlertRow({
   tone,
@@ -65,7 +68,7 @@ function eventBody(r: AuditRecord): { tone: "active" | "good" | "warn"; title: s
 
 export function Dashboard() {
   const navigate = useNavigate();
-  const { current } = useCurrentStartup();
+  const { current, canSwitch } = useCurrentStartup();
   const isMobile = useIsMobile();
   const [procs, setProcs] = useState<Procurement[]>([]);
   const [account, setAccount] = useState<EscrowAccount | null>(null);
@@ -74,6 +77,8 @@ export function Dashboard() {
 
   useEffect(() => {
     if (!current) return;
+    setProcs([]);
+    setAccount(null);
     (async () => {
       try {
         const [p, a, ev] = await Promise.all([
@@ -89,6 +94,22 @@ export function Dashboard() {
       }
     })();
   }, [current]);
+
+  // Mock invoices live entirely client-side until the invoice service ships.
+  const invoices = useMemo(
+    () => (current ? mockInvoicesFor(current) : []),
+    [current],
+  );
+
+  // Aggregate monthly series — this is what feeds the three charts.
+  const series = useMemo(() => {
+    return computeStartupMonthly(
+      current,
+      procs,
+      invoices,
+      account?.balance_cents ?? 0,
+    );
+  }, [current, procs, invoices, account]);
 
   if (!current) {
     return (
@@ -108,12 +129,29 @@ export function Dashboard() {
     )
     .reduce((s, p) => s + p.amount_cents, 0);
 
+  const lastMonth = series.months.length - 1;
+  const salesMoM =
+    lastMonth > 0 && series.sales[lastMonth - 1] > 0
+      ? ((series.sales[lastMonth] - series.sales[lastMonth - 1]) /
+          series.sales[lastMonth - 1]) *
+        100
+      : 0;
+  const scoreTrend = series.score[lastMonth] - series.score[0];
+
   return (
     <div className="stack" style={{ gap: "var(--s-6)" }}>
       <section className="dashboard-hero">
         <div>
           <div className="eyebrow" style={{ marginBottom: 12 }}>
             داشبورد · {toFaDigits(new Date().toLocaleDateString("fa-IR"))}
+            {canSwitch && (
+              <span
+                className="mono"
+                style={{ marginInlineStart: 8, color: "var(--orange-600)" }}
+              >
+                · حالت ادمین — مشاهده {current.startup_name}
+              </span>
+            )}
           </div>
           <h1 style={{ fontSize: "var(--t-3xl)", lineHeight: 1.15 }}>
             صبح بخیر، {current.startup_name}.
@@ -178,19 +216,158 @@ export function Dashboard() {
           unit="میلیارد ریال"
         />
         <Stat
-          label="امتیاز اعتباری"
-          value={toFaDigits(current.credit_score)}
-          unit="از ۱۰۰"
+          label="درآمد ماه جاری"
+          value={formatIRR(series.sales[lastMonth], { withUnit: false })}
+          unit="میلیارد ریال"
           delta={{
-            text:
-              current.credit_score > 75
-                ? "وضعیت پایدار"
-                : current.credit_score > 50
-                  ? "نیاز به تقویت"
-                  : "ریسک بالا",
-            tone: current.credit_score > 75 ? "up" : "down",
+            text: `${salesMoM >= 0 ? "↑" : "↓"} ${formatPercent(Math.abs(salesMoM))} ماه‌به‌ماه`,
+            tone: salesMoM >= 0 ? "up" : "down",
           }}
         />
+      </section>
+
+      {/* CHART 1 — خرید vs فروش ماهانه */}
+      <section className="card">
+        <div
+          className="card-title"
+          style={{ flexWrap: "wrap", gap: 12 }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <h3>خرید و فروش ماهانه</h3>
+            <div
+              className="muted"
+              style={{ fontSize: "var(--t-sm)", marginTop: 4 }}
+            >
+              مبتنی بر {toFaDigits(series.totals.procCount)} فاکتور خرید و{" "}
+              {toFaDigits(series.totals.invCount)} فاکتور فروش · ۶ ماه گذشته
+            </div>
+          </div>
+          <div className="row" style={{ gap: 16, fontSize: 12, flexShrink: 0 }}>
+            <span className="row" style={{ gap: 6 }}>
+              <span
+                style={{
+                  width: 10,
+                  height: 10,
+                  background: "var(--orange-600)",
+                  borderRadius: 2,
+                }}
+              />
+              خرید
+            </span>
+            <span className="row" style={{ gap: 6 }}>
+              <span
+                style={{
+                  width: 10,
+                  height: 10,
+                  background: "var(--state-good)",
+                  borderRadius: 2,
+                }}
+              />
+              فروش
+            </span>
+          </div>
+        </div>
+        <BarPair
+          labels={series.labels}
+          a={series.purchases}
+          b={series.sales}
+          colorA="var(--orange-600)"
+          colorB="var(--state-good)"
+          height={210}
+        />
+      </section>
+
+      {/* CHART 2 + 3 — Escrow & credit utilization + Credit health score */}
+      <section className="grid two-col-shrink">
+        <div className="card">
+          <div
+            className="card-title"
+            style={{ flexWrap: "wrap", gap: 12 }}
+          >
+            <div>
+              <h3>اسکرو و مصرف خط اعتباری</h3>
+              <div
+                className="muted"
+                style={{ fontSize: "var(--t-sm)", marginTop: 4 }}
+              >
+                سقف اعتبار: {formatIRR(series.creditLine)}
+              </div>
+            </div>
+            <div className="row" style={{ gap: 16, fontSize: 12 }}>
+              <span className="row" style={{ gap: 6 }}>
+                <span
+                  style={{
+                    width: 10,
+                    height: 10,
+                    background: "var(--state-active)",
+                    borderRadius: 2,
+                  }}
+                />
+                موجودی اسکرو
+              </span>
+              <span className="row" style={{ gap: 6 }}>
+                <span
+                  style={{
+                    width: 10,
+                    height: 10,
+                    background: "var(--orange-600)",
+                    borderRadius: 2,
+                  }}
+                />
+                مصرف اعتبار
+              </span>
+            </div>
+          </div>
+          <DualLine
+            labels={series.labels}
+            a={series.escrow}
+            b={series.creditUsed}
+            colorA="var(--state-active)"
+            colorB="var(--orange-600)"
+            fillA="rgba(46,90,143,0.10)"
+            fillB="rgba(210,105,30,0.10)"
+            height={210}
+            yMax={series.creditLine}
+            yMaxLabel={`سقف اعتبار · ${formatIRR(series.creditLine)}`}
+          />
+        </div>
+
+        <div className="card">
+          <div
+            className="card-title"
+            style={{ flexWrap: "wrap", gap: 12 }}
+          >
+            <div>
+              <h3>شاخص اعتبار شرکت در trustC</h3>
+              <div
+                className="muted"
+                style={{ fontSize: "var(--t-sm)", marginTop: 4 }}
+              >
+                ترکیب رشد فروش، حاشیه اسکرو و مصرف خط اعتباری
+              </div>
+            </div>
+            <span
+              className="chip"
+              data-tone={
+                scoreTrend > 2 ? "good" : scoreTrend < -2 ? "bad" : "warn"
+              }
+            >
+              <span className="mono">
+                {scoreTrend >= 0 ? "+" : "−"}
+                {toFaDigits(Math.abs(scoreTrend))}
+              </span>
+            </span>
+          </div>
+          <ScoreLine
+            labels={series.labels}
+            points={series.score}
+            color={scoreTrend >= 0 ? "var(--state-good)" : "var(--state-bad)"}
+            fill={
+              scoreTrend >= 0 ? "rgba(47,125,79,0.10)" : "rgba(180,40,40,0.10)"
+            }
+            height={210}
+          />
+        </div>
       </section>
 
       <section className="grid two-col-shrink">

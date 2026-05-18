@@ -141,6 +141,124 @@ window.tc = (function () {
                           .replace(/[,،\s]/g, "")) || 0;
   }
 
+  /* ----------------------------------------------------------
+     Monthly aggregator
+     Buckets purchases, sales, escrow lock/release and credit
+     utilization across the same 6 Jalali months that data.js
+     uses to fan out the synthetic history. All series are
+     derived from the actual procurement/invoice records, so
+     swapping data → records propagates to the dashboard charts.
+     ---------------------------------------------------------- */
+  const MONTHS = ["1404/10","1404/11","1404/12","1405/01","1405/02","1405/03"];
+  const MONTH_LABELS_FA = ["دی","بهمن","اسفند","فروردین","اردیبهشت","خرداد"];
+  const ESCROW_LOCK_IDX  = 3; // ESCROW_LOCK position in FSM
+  const PAYMENT_RELEASE_IDX = 6;
+
+  function bucketOf(jalaliDate) {
+    if (!jalaliDate) return -1;
+    const ym = jalaliDate.slice(0, 7); // "YYYY/MM"
+    return MONTHS.indexOf(ym);
+  }
+
+  function computeStartupMonthly(startupId) {
+    const procs = window.trustcData.procurements.filter(p => p.startupId === startupId);
+    const invs  = window.trustcData.customerInvoices.filter(i => i.startupId === startupId);
+    const startup = getStartup(startupId);
+    const fsmIndex = (st) => window.trustcData.procurementFSM.findIndex(x => x.state === st);
+
+    const purchases     = new Array(MONTHS.length).fill(0);
+    const sales         = new Array(MONTHS.length).fill(0);
+    const escrowInflow  = new Array(MONTHS.length).fill(0); // amount locked in month
+    const escrowOutflow = new Array(MONTHS.length).fill(0); // amount released in month
+    const salesPaid     = new Array(MONTHS.length).fill(0); // PAID invoices by paidAt
+
+    procs.forEach(p => {
+      const b = bucketOf(p.createdAt);
+      if (b >= 0) {
+        purchases[b] += p.amount;
+        const sIdx = fsmIndex(p.state);
+        if (sIdx >= ESCROW_LOCK_IDX) escrowInflow[b] += p.amount;
+        if (sIdx >= PAYMENT_RELEASE_IDX) {
+          // Payment release lands ~1 month after lock (clamped to last bucket)
+          const rel = Math.min(MONTHS.length - 1, b + 1);
+          escrowOutflow[rel] += p.amount;
+        }
+      }
+    });
+
+    invs.forEach(i => {
+      const b = bucketOf(i.issuedAt);
+      if (b >= 0) sales[b] += i.amount;
+      if (i.status === "PAID") {
+        const pb = bucketOf(i.paidAt || i.issuedAt);
+        if (pb >= 0) salesPaid[pb] += i.amount;
+      }
+    });
+
+    // Escrow running balance: start from current escrowBalance and walk
+    // backwards through inflows/outflows to estimate history.
+    const escrow = new Array(MONTHS.length).fill(0);
+    let balance = startup ? startup.escrowBalance : 0;
+    escrow[MONTHS.length - 1] = balance;
+    for (let m = MONTHS.length - 1; m > 0; m--) {
+      balance = balance - escrowInflow[m] + escrowOutflow[m];
+      escrow[m - 1] = Math.max(0, balance);
+    }
+
+    // Credit utilization per month — "still-locked" credit. A
+    // procurement that reached ESCROW_LOCK contributes its amount
+    // from its lock-month onward, and stops contributing once its
+    // PAYMENT_RELEASE month passes (modeled as lockMonth + 1).
+    const creditLine = startup ? startup.creditLine : 0;
+    const stillLocked = new Array(MONTHS.length).fill(0);
+    procs.forEach(p => {
+      const b = bucketOf(p.createdAt);
+      if (b < 0) return;
+      const sIdx = fsmIndex(p.state);
+      if (sIdx < ESCROW_LOCK_IDX) return;
+      const releaseAt = sIdx >= PAYMENT_RELEASE_IDX
+        ? Math.min(MONTHS.length, b + 2)  // released by the bucket after lock
+        : MONTHS.length;
+      for (let m = b; m < releaseAt; m++) stillLocked[m] += p.amount;
+    });
+    // Keep the chart anchored to the profile's current creditUsed
+    // when the last bucket has a non-zero value, but cap to creditLine.
+    const lastLocked = stillLocked[MONTHS.length - 1];
+    const targetUsed = startup ? startup.creditUsed : lastLocked;
+    const scale = lastLocked > 0
+      ? Math.min(3, Math.max(0.3, targetUsed / lastLocked))
+      : 1;
+    const creditUsed = stillLocked.map(v =>
+      Math.min(creditLine || Infinity, Math.round(v * scale))
+    );
+
+    // Composite "credit health" score: 0–100, derived from
+    // (sales growth) + (escrow buffer) − (utilization). Drives the
+    // اعتبار-over-time line. Not surfaced as plain numbers anywhere.
+    const score = MONTHS.map((_, m) => {
+      const growth = m === 0 ? 0 : (sales[m] - sales[0]) / Math.max(1, sales[0]);
+      const buffer = escrow[m] / Math.max(1, creditLine);
+      const util   = creditUsed[m] / Math.max(1, creditLine);
+      const raw = 60 + growth * 18 + buffer * 35 - util * 30;
+      return Math.max(20, Math.min(100, Math.round(raw)));
+    });
+
+    return {
+      months: MONTHS, labels: MONTH_LABELS_FA,
+      purchases, sales, salesPaid,
+      escrowInflow, escrowOutflow, escrow,
+      creditUsed, creditLine, score,
+      totals: {
+        purchases: purchases.reduce((a,b) => a+b, 0),
+        sales: sales.reduce((a,b) => a+b, 0),
+        salesPaid: salesPaid.reduce((a,b) => a+b, 0),
+        salesOpen: sales.reduce((a,b) => a+b, 0) - salesPaid.reduce((a,b) => a+b, 0),
+        procCount: procs.length,
+        invCount: invs.length,
+      },
+    };
+  }
+
   return {
     config,
     toFaDigits,
@@ -148,5 +266,6 @@ window.tc = (function () {
     stateTone, stateLabelFa, riskLabelFa, priorityLabelFa,
     getStartup, getSupplier, stateIndex,
     parsePersianNumber,
+    computeStartupMonthly,
   };
 })();

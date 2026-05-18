@@ -68,7 +68,14 @@ function App() {
   const isMobile = useIsMobile();
 
   // ---- Current startup (for FOUNDER persona) ----
-  const currentStartup = window.trustcData.startups[0];
+  // Regular founders are bound to their own startupId. Admins
+  // impersonating FOUNDER can switch via the sidebar selector.
+  const [currentStartupId, setCurrentStartupId] = useStateApp(
+    window.trustcData.startups[0].id
+  );
+  const currentStartup =
+    window.trustcData.startups.find(s => s.id === currentStartupId) ||
+    window.trustcData.startups[0];
 
   // ---- Apply tweaks to root element ----
   useEffectApp(() => {
@@ -84,6 +91,12 @@ function App() {
   useEffectApp(() => {
     if (!authUser) return;
     setPersona(authUser.role);
+    // Bind founders to their own startup; everyone else starts at st_001.
+    if (authUser.role === "FOUNDER" && authUser.startupId) {
+      setCurrentStartupId(authUser.startupId);
+    } else {
+      setCurrentStartupId(window.trustcData.startups[0].id);
+    }
   }, [authUser]);
 
   useEffectApp(() => {
@@ -194,8 +207,12 @@ function App() {
 
   // ---- Context for screens ----
   const founderFrozen = frozenIds.has(currentStartup.id);
+  const isRealAdmin = authUser.role === "ADMIN";
   const ctx = {
     persona, currentStartup,
+    currentStartupId,
+    setCurrentStartupId: isRealAdmin ? setCurrentStartupId : () => {},
+    canSwitchStartup: isRealAdmin,
     user: authUser,
     setRoute: (r, n = null) => { setRouteState(r); setNav(n); setSidebarOpen(false); },
     nav, setNav,
@@ -240,7 +257,6 @@ function App() {
   }
 
   const frozenStartupForBanner = founderFrozen && persona === "FOUNDER" ? currentStartup : null;
-  const isRealAdmin = authUser.role === "ADMIN";
 
   // ---- Mobile shell branch ----
   if (isMobile) {
@@ -254,7 +270,7 @@ function App() {
           route={route}
           setRoute={(r) => { setRouteState(r); setNav(null); }}
           onLogout={handleLogout}>
-          <CurrentScreen key={refreshTick} />
+          <CurrentScreen key={`${refreshTick}:${currentStartupId}`} />
         </MobileShell>
         <StartupModal startup={openStartup}
           onClose={() => setOpenStartup(null)}
@@ -278,6 +294,8 @@ function App() {
       <Sidebar persona={persona} route={route}
         setRoute={(r) => { setRouteState(r); setNav(null); }}
         currentStartup={persona === "FOUNDER" ? currentStartup : null}
+        canSwitchStartup={isRealAdmin && persona === "FOUNDER"}
+        onSwitchStartup={(id) => { setCurrentStartupId(id); setNav(null); }}
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)} />
       <div className="app-main">
@@ -290,7 +308,7 @@ function App() {
           onMenu={() => setSidebarOpen(o => !o)}
           onLogout={handleLogout} />
         <main className="app-content">
-          <CurrentScreen key={refreshTick} />
+          <CurrentScreen key={`${refreshTick}:${currentStartupId}`} />
         </main>
       </div>
 

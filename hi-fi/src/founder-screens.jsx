@@ -27,8 +27,17 @@ function FounderDashboard({ ctx }) {
     .filter(p => ["ESCROW_LOCK","SUPPLIER_DISPATCH","DELIVERY_CONFIRMATION","PAYMENT_RELEASE"].includes(p.state))
     .reduce((s,p) => s + p.amount, 0);
 
+  // Per-startup monthly history derived from the synthetic 6-month dataset.
+  const series = useMemo(
+    () => window.tc.computeStartupMonthly(startup.id),
+    [startup.id]
+  );
+
   // Live ticking numbers — burn rate decrements once a second
   const [tickEscrow, setTickEscrow] = useState(startup.escrowBalance);
+  useEffect(() => {
+    setTickEscrow(startup.escrowBalance);
+  }, [startup.id, startup.escrowBalance]);
   useEffect(() => {
     if (ctx.frozen) return;
     const id = setInterval(() => {
@@ -38,16 +47,37 @@ function FounderDashboard({ ctx }) {
   }, [ctx.frozen]);
 
   const creditPct = (startup.creditUsed / startup.creditLine) * 100;
+  const lastMonth = series.months.length - 1;
+  const salesMoM = lastMonth > 0 && series.sales[lastMonth - 1] > 0
+    ? ((series.sales[lastMonth] - series.sales[lastMonth - 1]) / series.sales[lastMonth - 1]) * 100
+    : 0;
+  const scoreTrend = series.score[lastMonth] - series.score[0];
+
+  // Most-recent activity (sorted by date) — drives the live alerts.
+  const recent = [...procs]
+    .filter(p => p.timeline && p.timeline.length)
+    .sort((a, b) => (b.timeline[b.timeline.length - 1].at || "")
+                     .localeCompare(a.timeline[a.timeline.length - 1].at || ""))
+    .slice(0, 4);
 
   return (
     <div className="stack" style={{ gap: "var(--s-6)" }}>
       {/* Editorial hero */}
       <section style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: "var(--s-6)", alignItems: "end", padding: "var(--s-6) 0" }}>
         <div>
-          <div className="eyebrow" style={{ marginBottom: 12 }}>داشبورد · {window.tc.toFaDigits("1405/03/14")}</div>
-          <h1 style={{ fontSize: "var(--t-3xl)", lineHeight: 1.15 }}>صبح بخیر، آلفا.</h1>
+          <div className="eyebrow" style={{ marginBottom: 12 }}>
+            داشبورد · {window.tc.toFaDigits("1405/03/14")}
+            {ctx.canSwitchStartup && (
+              <span className="mono" style={{ marginInlineStart: 8, color: "var(--orange-600)" }}>
+                · حالت ادمین — مشاهده {startup.code}
+              </span>
+            )}
+          </div>
+          <h1 style={{ fontSize: "var(--t-3xl)", lineHeight: 1.15 }}>
+            صبح بخیر، {startup.name}.
+          </h1>
           <p className="muted" style={{ fontSize: "var(--t-lg)", marginTop: 8, maxWidth: 640 }}>
-            امروز <b className="num" style={{ color: "var(--fg-default)" }}>{inflight.length}</b> خرید فعال در جریان است
+            امروز <b className="num" style={{ color: "var(--fg-default)" }}>{window.tc.toFaDigits(inflight.length)}</b> خرید فعال در جریان است
             و <b className="num" style={{ color: "var(--fg-default)" }}>{window.tc.formatIRR(escrowLocked)}</b> در اسکرو قفل شده.
             سقف اعتباری مصرف‌شده: <b className="num" style={{ color: "var(--fg-default)" }}>{window.tc.formatPercent(creditPct)}</b>.
           </p>
@@ -81,38 +111,103 @@ function FounderDashboard({ ctx }) {
         />
         <Stat
           label="درآمد ماه جاری"
-          value={window.tc.formatIRR(startup.monthlyRevenue, { withUnit: false })}
+          value={window.tc.formatIRR(series.sales[lastMonth], { withUnit: false })}
           unit="میلیارد ریال"
-          delta={{ text: "↑ ۴٫۲% نسبت به ماه قبل", tone: "up" }}
+          delta={{
+            text: `${salesMoM >= 0 ? "↑" : "↓"} ${window.tc.formatPercent(Math.abs(salesMoM))} ماه‌به‌ماه`,
+            tone: salesMoM >= 0 ? "up" : "down",
+          }}
         />
       </section>
 
-      {/* Burn vs Revenue chart */}
+      {/* CHART 1 — Monthly Purchases vs Sales (paired bars) */}
       <section className="card">
         <div className="card-title" style={{ flexWrap: "wrap", gap: 12 }}>
           <div style={{ minWidth: 0 }}>
-            <h3>روند سوخت سرمایه و درآمد</h3>
-            <div className="muted" style={{ fontSize: "var(--t-sm)", marginTop: 4 }}>۱۲ ماه گذشته · میلیارد ریال در ماه</div>
+            <h3>خرید و فروش ماهانه</h3>
+            <div className="muted" style={{ fontSize: "var(--t-sm)", marginTop: 4 }}>
+              مبتنی بر {window.tc.toFaDigits(series.totals.procCount)} فاکتور خرید و {window.tc.toFaDigits(series.totals.invCount)} فاکتور فروش · ۶ ماه گذشته
+            </div>
           </div>
           <div className="row" style={{ gap: 16, fontSize: 12, flexShrink: 0 }}>
             <span className="row" style={{ gap: 6 }}>
               <span style={{ width: 10, height: 10, background: "var(--orange-600)", borderRadius: 2 }} />
-              سوخت
+              خرید
             </span>
             <span className="row" style={{ gap: 6 }}>
               <span style={{ width: 10, height: 10, background: "var(--state-good)", borderRadius: 2 }} />
-              درآمد
+              فروش
             </span>
           </div>
         </div>
-        <div style={{ position: "relative", height: 200, marginTop: 8 }}>
-          <Spark points={window.trustcData.revenueSeries} color="var(--state-good)" fill="rgba(47,125,79,0.08)" height={200} />
-          <div style={{ position: "absolute", inset: 0 }}>
-            <Spark points={window.trustcData.burnSeries} color="var(--orange-600)" fill="rgba(210,105,30,0.08)" height={200} />
+        <BarPair
+          labels={series.labels}
+          a={series.purchases}
+          b={series.sales}
+          colorA="var(--orange-600)"
+          colorB="var(--state-good)"
+          height={210}
+        />
+      </section>
+
+      {/* CHART 2 + 3 — Escrow + Credit utilization, Credit-health score */}
+      <section className="grid two-col-shrink">
+        <div className="card">
+          <div className="card-title" style={{ flexWrap: "wrap", gap: 12 }}>
+            <div>
+              <h3>اسکرو و مصرف خط اعتباری</h3>
+              <div className="muted" style={{ fontSize: "var(--t-sm)", marginTop: 4 }}>
+                سقف اعتبار: {window.tc.formatIRR(series.creditLine)}
+              </div>
+            </div>
+            <div className="row" style={{ gap: 16, fontSize: 12 }}>
+              <span className="row" style={{ gap: 6 }}>
+                <span style={{ width: 10, height: 10, background: "var(--state-active)", borderRadius: 2 }} />
+                موجودی اسکرو
+              </span>
+              <span className="row" style={{ gap: 6 }}>
+                <span style={{ width: 10, height: 10, background: "var(--orange-600)", borderRadius: 2 }} />
+                مصرف اعتبار
+              </span>
+            </div>
           </div>
+          <DualLine
+            labels={series.labels}
+            a={series.escrow}
+            b={series.creditUsed}
+            colorA="var(--state-active)"
+            colorB="var(--orange-600)"
+            fillA="rgba(46,90,143,0.10)"
+            fillB="rgba(210,105,30,0.10)"
+            height={210}
+            yMax={series.creditLine}
+            yMaxLabel={`سقف اعتبار · ${window.tc.formatIRR(series.creditLine)}`}
+          />
         </div>
-        <div className="row" style={{ justifyContent: "space-between", fontFamily: "var(--mono-data)", fontSize: 11, color: "var(--fg-muted)", marginTop: 8 }}>
-          {["فرو","ارد","خرد","تیر","مرد","شهر","مهر","آبا","آذر","دی","بهم","اسف"].map((m, i) => <span key={i}>{m}</span>)}
+
+        <div className="card">
+          <div className="card-title" style={{ flexWrap: "wrap", gap: 12 }}>
+            <div>
+              <h3>شاخص اعتبار شرکت در trustC</h3>
+              <div className="muted" style={{ fontSize: "var(--t-sm)", marginTop: 4 }}>
+                ترکیب رشد فروش، حاشیه اسکرو و مصرف خط اعتباری
+              </div>
+            </div>
+            <span className="chip" data-tone={
+              scoreTrend > 2 ? "good" : scoreTrend < -2 ? "bad" : "warn"
+            }>
+              <span className="mono">
+                {scoreTrend >= 0 ? "+" : "−"}{window.tc.toFaDigits(Math.abs(scoreTrend))}
+              </span>
+            </span>
+          </div>
+          <ScoreLine
+            labels={series.labels}
+            points={series.score}
+            color={scoreTrend >= 0 ? "var(--state-good)" : "var(--state-bad)"}
+            fill={scoreTrend >= 0 ? "rgba(47,125,79,0.10)" : "rgba(180,40,40,0.10)"}
+            height={210}
+          />
         </div>
       </section>
 
@@ -144,6 +239,9 @@ function FounderDashboard({ ctx }) {
                   <td className="num">{window.tc.formatIRR(p.amount)}</td>
                 </tr>
               ))}
+              {inflight.length === 0 && (
+                <tr><td colSpan={4}><div className="empty"><h3>خرید فعالی نیست</h3><div className="muted">همه خریدها نهایی شده‌اند.</div></div></td></tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -151,33 +249,171 @@ function FounderDashboard({ ctx }) {
         <div className="card">
           <div className="card-title"><h3>اعلان‌ها</h3></div>
           <div className="stack" style={{ gap: 12 }}>
-            <AlertRow
-              tone="active"
-              title="اسکرو قفل شد"
-              body="۳۸٫۴ میلیارد ریال برای زیرساخت ابری در اسکرو نشست."
-              hint="proc_5521 · لحظاتی پیش"
-            />
-            <AlertRow
-              tone="good"
-              title="پرداخت آزاد شد"
-              body="پرداخت به آراز سرور انجام شد."
-              hint="proc_5466 · ۲ ساعت پیش"
-            />
-            <AlertRow
-              tone="warn"
-              title="نیاز به تأیید تحویل"
-              body="بازرگانی پارسا کالا را ارسال کرد."
-              hint="proc_5497 · امروز"
-            />
-            <AlertRow
-              tone="active"
-              title="ارتقای خط اعتباری"
-              body="پرداخت سپهر داده — سقف +۲۴ میلیارد افزایش یافت."
-              hint="cinv_001 · ۳ روز قبل"
-            />
+            {recent.length === 0 && (
+              <div className="muted" style={{ fontSize: 13 }}>اعلانی برای نمایش نیست.</div>
+            )}
+            {recent.map(p => {
+              const last = p.timeline[p.timeline.length - 1];
+              const idx = window.tc.stateIndex(p.state);
+              const tone = idx <= 1 ? "warn" : idx >= 6 ? "good" : "active";
+              const titleByState = {
+                DRAFT: "خرید جدید ثبت شد",
+                MANAGER_REVIEW: "در بررسی مدیر",
+                FINANCIAL_VALIDATION: "اعتبارسنجی مالی",
+                ESCROW_LOCK: "اسکرو قفل شد",
+                SUPPLIER_DISPATCH: "تأمین‌کننده ارسال کرد",
+                DELIVERY_CONFIRMATION: "تحویل تأیید شد",
+                PAYMENT_RELEASE: "پرداخت آزاد شد",
+                ACCOUNTING_FINALIZATION: "حسابداری نهایی شد",
+              };
+              return (
+                <AlertRow
+                  key={p.id}
+                  tone={tone}
+                  title={titleByState[p.state] || p.state}
+                  body={`${window.tc.formatIRR(p.amount)} · ${p.title}`}
+                  hint={`${p.id} · ${window.tc.toFaDigits(last?.at || p.createdAt)}`}
+                />
+              );
+            })}
           </div>
         </div>
       </section>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------
+   Inline chart primitives — small, hand-rolled SVG.
+   Kept inline to avoid a chart dependency in the prototype.
+   ------------------------------------------------------------ */
+function BarPair({ labels, a, b, colorA, colorB, height = 200 }) {
+  const w = 600;
+  const padX = 24, padY = 18;
+  const max = Math.max(1, ...a, ...b);
+  const n = labels.length;
+  const groupW = (w - padX * 2) / n;
+  const barW = Math.max(6, groupW / 2 - 8);
+
+  return (
+    <div style={{ position: "relative", height }}>
+      <svg viewBox={`0 0 ${w} ${height}`} preserveAspectRatio="none" width="100%" height={height} aria-hidden="true">
+        {/* gridlines */}
+        {[0.25, 0.5, 0.75].map((t, i) => (
+          <line key={i}
+            x1={padX} x2={w - padX}
+            y1={padY + (height - padY * 2) * (1 - t)}
+            y2={padY + (height - padY * 2) * (1 - t)}
+            stroke="var(--border-hairline)" strokeWidth="1" strokeDasharray="3 4" />
+        ))}
+        {labels.map((_, i) => {
+          const gx = padX + i * groupW + groupW / 2;
+          const ah = ((a[i] || 0) / max) * (height - padY * 2);
+          const bh = ((b[i] || 0) / max) * (height - padY * 2);
+          return (
+            <g key={i}>
+              <rect x={gx - barW - 2} y={height - padY - ah} width={barW} height={ah} fill={colorA} rx="1.5" />
+              <rect x={gx + 2}        y={height - padY - bh} width={barW} height={bh} fill={colorB} rx="1.5" />
+            </g>
+          );
+        })}
+      </svg>
+      <div className="row" style={{ justifyContent: "space-between", fontFamily: "var(--mono-data)", fontSize: 11, color: "var(--fg-muted)", marginTop: 4, paddingInline: 24 }}>
+        {labels.map((m, i) => <span key={i}>{m}</span>)}
+      </div>
+    </div>
+  );
+}
+
+function DualLine({ labels, a, b, colorA, colorB, fillA, fillB, height = 200, yMax, yMaxLabel }) {
+  const w = 600;
+  const padX = 24, padY = 18;
+  const max = Math.max(1, yMax || 0, ...a, ...b);
+  const x = (i) => padX + (i * (w - padX * 2)) / (labels.length - 1);
+  const y = (v) => padY + (1 - v / max) * (height - padY * 2);
+
+  function pathFor(arr) {
+    return "M " + arr.map((v, i) => `${x(i).toFixed(2)} ${y(v).toFixed(2)}`).join(" L ");
+  }
+  function areaFor(arr) {
+    return pathFor(arr) + ` L ${x(arr.length - 1)} ${height - padY} L ${x(0)} ${height - padY} Z`;
+  }
+
+  return (
+    <div style={{ position: "relative", height }}>
+      <svg viewBox={`0 0 ${w} ${height}`} preserveAspectRatio="none" width="100%" height={height} aria-hidden="true">
+        {/* ceiling line for credit limit */}
+        {yMax && (
+          <line x1={padX} x2={w - padX} y1={padY} y2={padY}
+            stroke="var(--orange-600)" strokeWidth="1" strokeDasharray="4 4" opacity="0.55" />
+        )}
+        {[0.25, 0.5, 0.75].map((t, i) => (
+          <line key={i}
+            x1={padX} x2={w - padX}
+            y1={padY + (height - padY * 2) * (1 - t)}
+            y2={padY + (height - padY * 2) * (1 - t)}
+            stroke="var(--border-hairline)" strokeWidth="1" strokeDasharray="3 4" />
+        ))}
+        <path d={areaFor(a)} fill={fillA} />
+        <path d={pathFor(a)} stroke={colorA} strokeWidth="1.8" fill="none" vectorEffect="non-scaling-stroke" />
+        <path d={areaFor(b)} fill={fillB} />
+        <path d={pathFor(b)} stroke={colorB} strokeWidth="1.8" fill="none" vectorEffect="non-scaling-stroke" />
+        {a.map((v, i) => (
+          <circle key={"a"+i} cx={x(i)} cy={y(v)} r="2.6" fill={colorA} />
+        ))}
+        {b.map((v, i) => (
+          <circle key={"b"+i} cx={x(i)} cy={y(v)} r="2.6" fill={colorB} />
+        ))}
+      </svg>
+      {yMaxLabel && (
+        <div style={{ position: "absolute", insetInlineStart: 28, top: 2, fontSize: 10, color: "var(--orange-600)", fontFamily: "var(--mono-data)", letterSpacing: 0.4 }}>
+          {yMaxLabel}
+        </div>
+      )}
+      <div className="row" style={{ justifyContent: "space-between", fontFamily: "var(--mono-data)", fontSize: 11, color: "var(--fg-muted)", marginTop: 4, paddingInline: 24 }}>
+        {labels.map((m, i) => <span key={i}>{m}</span>)}
+      </div>
+    </div>
+  );
+}
+
+function ScoreLine({ labels, points, color, fill, height = 200 }) {
+  const w = 600;
+  const padX = 24, padY = 18;
+  const lo = 0, hi = 100;
+  const x = (i) => padX + (i * (w - padX * 2)) / (labels.length - 1);
+  const y = (v) => padY + (1 - (v - lo) / (hi - lo)) * (height - padY * 2);
+  const linePath = "M " + points.map((v, i) => `${x(i).toFixed(2)} ${y(v).toFixed(2)}`).join(" L ");
+  const areaPath = linePath + ` L ${x(points.length - 1)} ${height - padY} L ${x(0)} ${height - padY} Z`;
+
+  return (
+    <div style={{ position: "relative", height }}>
+      <svg viewBox={`0 0 ${w} ${height}`} preserveAspectRatio="none" width="100%" height={height} aria-hidden="true">
+        {[20, 40, 60, 80].map(v => (
+          <g key={v}>
+            <line
+              x1={padX} x2={w - padX}
+              y1={y(v)} y2={y(v)}
+              stroke="var(--border-hairline)" strokeWidth="1" strokeDasharray="3 4" />
+            <text x={padX - 4} y={y(v) + 3} textAnchor="end"
+              fontSize="9" fill="var(--fg-muted)" fontFamily="var(--mono-data)">{v}</text>
+          </g>
+        ))}
+        <path d={areaPath} fill={fill} />
+        <path d={linePath} stroke={color} strokeWidth="2" fill="none" vectorEffect="non-scaling-stroke" />
+        {points.map((v, i) => (
+          <g key={i}>
+            <circle cx={x(i)} cy={y(v)} r="3" fill={color} />
+            <text x={x(i)} y={y(v) - 8} textAnchor="middle"
+              fontSize="10" fill={color} fontFamily="var(--mono-data)" fontWeight="600">
+              {window.tc.toFaDigits(v)}
+            </text>
+          </g>
+        ))}
+      </svg>
+      <div className="row" style={{ justifyContent: "space-between", fontFamily: "var(--mono-data)", fontSize: 11, color: "var(--fg-muted)", marginTop: 4, paddingInline: 24 }}>
+        {labels.map((m, i) => <span key={i}>{m}</span>)}
+      </div>
     </div>
   );
 }

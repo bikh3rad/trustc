@@ -1,8 +1,8 @@
 // Invoices service (services/invoice) is not yet implemented per PRD §3.3.
-// Until that lands, this screen shows the dual-pathway design + empty state.
-// Once the backend exposes /api/invoices, swap `mockInvoices` for a real fetch.
+// Until that lands, this screen shows the dual-pathway design + a
+// deterministic per-startup mock history from lib/mockInvoices.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Btn } from "../../components/ui/Btn";
 import { Chip } from "../../components/ui/Chip";
 import { Icon } from "../../components/ui/Icon";
@@ -15,26 +15,7 @@ import { MobileCard } from "../../layout/mobile/MobileCard";
 import { MobileList } from "../../layout/mobile/MobileList";
 import { formatIRR, formatIRRPlain, parsePersianNumber, toFaDigits } from "../../lib/format";
 import { useIsMobile } from "../../lib/useIsMobile";
-
-type SettlementMode = "ESCROW_DIRECT" | "SELF_FUNDED";
-type InvStatus = "OPEN" | "PAID";
-type Inv = {
-  id: string;
-  customer: string;
-  amount_cents: number;
-  mode: SettlementMode;
-  status: InvStatus;
-  issued_at: string;
-  paid_at?: string;
-};
-
-// Seed demo invoices (frontend-only until backend exists).
-const seed: Inv[] = [
-  { id: "cinv_001", customer: "شرکت سپهر داده", amount_cents: 48_000_000_000, mode: "ESCROW_DIRECT", status: "PAID", issued_at: "1405/02/20", paid_at: "1405/02/22" },
-  { id: "cinv_002", customer: "گروه صنعتی پایدار", amount_cents: 92_500_000_000, mode: "SELF_FUNDED", status: "PAID", issued_at: "1405/02/26", paid_at: "1405/02/29" },
-  { id: "cinv_003", customer: "هلدینگ نوآفرین", amount_cents: 36_400_000_000, mode: "ESCROW_DIRECT", status: "OPEN", issued_at: "1405/03/08" },
-  { id: "cinv_004", customer: "تعاونی توسعه", amount_cents: 14_200_000_000, mode: "SELF_FUNDED", status: "OPEN", issued_at: "1405/03/10" },
-];
+import { mockInvoicesFor, type Inv, type SettlementMode } from "../../lib/mockInvoices";
 
 export function Invoices() {
   const { current } = useCurrentStartup();
@@ -42,9 +23,16 @@ export function Invoices() {
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const frozen = current ? isFrozen(current.id) : false;
-  const [invoices, setInvoices] = useState<Inv[]>(seed);
+  const [invoices, setInvoices] = useState<Inv[]>(() =>
+    current ? mockInvoicesFor(current) : [],
+  );
   const [showNew, setShowNew] = useState(false);
   const [bump, setBump] = useState<{ amount: number; mode: SettlementMode } | null>(null);
+
+  // Re-seed the list when the admin switches companies in the sidebar.
+  useEffect(() => {
+    setInvoices(current ? mockInvoicesFor(current) : []);
+  }, [current]);
 
   function settle(inv: Inv) {
     if (frozen) {

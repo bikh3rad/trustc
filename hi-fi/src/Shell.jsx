@@ -61,8 +61,9 @@ function Brand() {
 }
 
 /* ---------------- Sidebar ---------------- */
-function Sidebar({ persona, route, setRoute, currentStartup, open, onClose }) {
+function Sidebar({ persona, route, setRoute, currentStartup, canSwitchStartup, onSwitchStartup, open, onClose }) {
   const items = navFor(persona);
+  const allStartups = window.trustcData.startups;
 
   const sectionTitle =
     persona === "FOUNDER" ? "ورک‌اسپیس استارتاپ" :
@@ -98,13 +99,25 @@ function Sidebar({ persona, route, setRoute, currentStartup, open, onClose }) {
 
         {persona === "FOUNDER" && currentStartup && (
           <div className="nav-section" style={{ borderBottom: 0 }}>
-            <div className="nav-section-title">شرکت فعال</div>
-            <div style={{ padding: "8px 12px 4px", fontSize: 13 }}>
-              <div style={{ fontWeight: 600, color: "var(--cream-50)" }}>{currentStartup.name}</div>
-              <div style={{ color: "var(--fg-on-manifest-muted)", fontSize: 11, marginTop: 2 }}>
-                {currentStartup.industry}
-              </div>
+            <div className="nav-section-title">
+              {canSwitchStartup ? "بنیان‌گذاران (ادمین)" : "شرکت فعال"}
             </div>
+
+            {canSwitchStartup ? (
+              <StartupPicker
+                startups={allStartups}
+                activeId={currentStartup.id}
+                onPick={(id) => { onSwitchStartup?.(id); onClose?.(); }}
+              />
+            ) : (
+              <div style={{ padding: "8px 12px 4px", fontSize: 13 }}>
+                <div style={{ fontWeight: 600, color: "var(--cream-50)" }}>{currentStartup.name}</div>
+                <div style={{ color: "var(--fg-on-manifest-muted)", fontSize: 11, marginTop: 2 }}>
+                  {currentStartup.industry}
+                </div>
+              </div>
+            )}
+
             <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 12px 0", fontSize: 11, color: "var(--fg-on-manifest-muted)" }}>
               <span>امتیاز اعتباری</span>
               <span className="mono" style={{ color: "var(--orange-500)", fontWeight: 600 }}>
@@ -123,6 +136,82 @@ function Sidebar({ persona, route, setRoute, currentStartup, open, onClose }) {
         </div>
       </aside>
     </>
+  );
+}
+
+/* ---------------- Startup picker (admin → impersonate founder) ----------
+   A compact, searchable list of all portfolio companies. The admin
+   clicks a row to drop into that company's founder workspace —
+   procurements, invoices, escrow and dashboard reflect the picked
+   startup's actual records.
+   ---------------------------------------------------------------- */
+function StartupPicker({ startups, activeId, onPick }) {
+  const [q, setQ] = React.useState("");
+  const filtered = q.trim()
+    ? startups.filter(s =>
+        s.name.includes(q.trim()) ||
+        s.code.toLowerCase().includes(q.trim().toLowerCase()))
+    : startups;
+
+  return (
+    <div className="stack" style={{ gap: 6, padding: "4px 8px 0" }}>
+      <input
+        type="text"
+        placeholder="جستجو نام/کد شرکت…"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        style={{
+          width: "100%",
+          padding: "6px 10px",
+          fontSize: 12,
+          background: "var(--navy-800, rgba(0,0,0,0.25))",
+          border: "1px solid var(--navy-700)",
+          borderRadius: 4,
+          color: "var(--cream-50)",
+          outline: "none",
+        }}
+      />
+      <div className="stack" style={{ gap: 1, maxHeight: 240, overflowY: "auto" }}>
+        {filtered.map(s => {
+          const active = s.id === activeId;
+          return (
+            <button
+              key={s.id}
+              onClick={() => onPick(s.id)}
+              title={`${s.name} · ${s.industry}`}
+              style={{
+                textAlign: "right",
+                padding: "8px 10px",
+                fontSize: 12,
+                background: active ? "var(--orange-600)" : "transparent",
+                color: active ? "var(--cream-50)" : "var(--fg-on-manifest, #fff)",
+                border: 0,
+                borderRadius: 4,
+                cursor: "pointer",
+                display: "grid",
+                gridTemplateColumns: "1fr auto",
+                alignItems: "center",
+                gap: 8,
+              }}
+              onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+              onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}
+            >
+              <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: active ? 600 : 500 }}>
+                {s.name}
+              </span>
+              <span className="mono" style={{ fontSize: 10, opacity: 0.7, letterSpacing: 0.5 }}>
+                {s.code}
+              </span>
+            </button>
+          );
+        })}
+        {filtered.length === 0 && (
+          <div style={{ padding: 10, fontSize: 11, color: "var(--fg-on-manifest-muted)", textAlign: "center" }}>
+            موردی یافت نشد
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -208,4 +297,4 @@ function UserMenu({ user, personaColor, role, onLogout }) {
   );
 }
 
-Object.assign(window, { Sidebar, Topbar, navFor });
+Object.assign(window, { Sidebar, Topbar, navFor, StartupPicker });
