@@ -60,12 +60,19 @@ func (h *Handler) Routes() http.Handler {
 	r.Post("/auth/login", h.login)
 	r.Post("/auth/logout", h.logout)
 	r.Get("/auth/me", h.me)
+	// Public demo-account roster (MVP only). The gateway exposes this
+	// publicly so the login screen can render every account + the shared
+	// demo password without requiring a JWT.
+	r.Get("/auth/demo-users", h.demoUsers)
 
 	// Internal endpoints — service-to-service only. Admin uses these to
 	// manage the users table without crossing schema ownership.
 	r.Get("/internal/users", h.internalListUsers)
+	r.Get("/internal/users/by-email", h.internalGetUserByEmail)
 	r.Get("/internal/users/{id}", h.internalGetUser)
 	r.Post("/internal/users/{id}/status", h.internalSetStatus)
+	r.Post("/internal/users/{id}/password", h.internalSetPassword)
+	r.Post("/internal/users/{id}/startup", h.internalSetStartupID)
 	return r
 }
 
@@ -293,6 +300,87 @@ func (h *Handler) internalListUsers(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) internalGetUser(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	u, err := h.store.GetByID(r.Context(), id)
+	if err != nil {
+		httpx.Error(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"user": u})
+}
+
+// internalGetUserByEmail powers the startup service's "auto-link the founder
+// at startup-creation time" flow — it needs to translate a founder email
+// into an auth.users row id without violating the schema boundary.
+func (h *Handler) internalGetUserByEmail(w http.ResponseWriter, r *http.Request) {
+	email := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("email")))
+	if email == "" {
+		httpx.Error(w, errs.New(errs.KindBadRequest, "MISSING_EMAIL", "email query param required"))
+		return
+	}
+	u, err := h.store.GetByEmail(r.Context(), email)
+	if err != nil {
+		httpx.Error(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"user": u})
+}
+
+// demoUsers returns every account in the system (without password hashes)
+// so the login screen can list them. MVP demo only — see CLAUDE.md §13.
+func (h *Handler) demoUsers(w http.ResponseWriter, r *http.Request) {
+	out, err := h.store.List(r.Context(), "", "")
+	if err != nil {
+		httpx.Error(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"users": out})
+}
+
+type setPasswordRequest struct {
+	Password string `json:"password"`
+}
+
+func (h *Handler) internalSetPassword(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var req setPasswordRequest
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		httpx.Error(w, err)
+		return
+	}
+	if len(req.Password) < 6 {
+		httpx.Error(w, errs.New(errs.KindBadRequest, "BAD_PASSWORD",
+			"password must be at least 6 characters"))
+		return
+	}
+	hash, err := HashPassword(req.Password)
+	if err != nil {
+		httpx.Error(w, errs.Wrap(errs.KindInternal, "HASH_FAILED",
+			"could not hash password", err))
+		return
+	}
+	u, err := h.store.SetPassword(r.Context(), id, hash)
+	if err != nil {
+		httpx.Error(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"user": u})
+}
+
+type setStartupRequest struct {
+	StartupID string `json:"startup_id"`
+}
+
+// internalSetStartupID links (or clears) a user's startup_id. The caller is
+// expected to be the admin service, which validates the startup exists before
+// calling. Pass an empty string in startup_id to unlink.
+func (h *Handler) internalSetStartupID(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var req setStartupRequest
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		httpx.Error(w, err)
+		return
+	}
+	req.StartupID = strings.TrimSpace(req.StartupID)
+	u, err := h.store.SetStartupID(r.Context(), id, req.StartupID)
 	if err != nil {
 		httpx.Error(w, err)
 		return

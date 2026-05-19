@@ -271,10 +271,12 @@ export function Invoices() {
         open={showNew}
         onClose={() => setShowNew(false)}
         onCreate={(inv) => {
+          if (!current) return;
           setInvoices((list) => [
             {
               ...inv,
               id: "cinv_" + Math.random().toString(36).slice(2, 6),
+              startup_id: current.id,
               status: "OPEN",
               issued_at: new Date().toLocaleDateString("fa-IR"),
             },

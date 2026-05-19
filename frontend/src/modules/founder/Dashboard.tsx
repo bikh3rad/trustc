@@ -84,7 +84,7 @@ export function Dashboard() {
         const [p, a, ev] = await Promise.all([
           ProcurementsApi.list(current.id),
           EscrowApi.account(current.id).catch(() => null),
-          AuditApi.list({ limit: 8 }),
+          AuditApi.list({ startup_id: current.id, limit: 8 }),
         ]);
         setProcs(p.procurements);
         setAccount(a);
@@ -114,8 +114,17 @@ export function Dashboard() {
   if (!current) {
     return (
       <div className="empty">
-        <h3>هنوز استارتاپی ثبت نشده</h3>
-        <div>برای شروع، استارتاپ خود را در پنل سرمایه‌گذار اضافه کنید.</div>
+        <h3>حساب شما هنوز به استارتاپی متصل نشده</h3>
+        <div style={{ marginTop: 8 }}>
+          ثبت‌نام شما با موفقیت تأیید شده است، ولی هنوز هیچ شرکتی تحت پوشش
+          حساب شما قرار نگرفته. سرمایه‌گذار باید استارتاپ شما را در پنل
+          «شرکت‌ها» اضافه و حساب شما را به آن متصل کند.
+        </div>
+        <div className="muted" style={{ marginTop: 12, fontSize: 13 }}>
+          راهنمای سرمایه‌گذار: ورود به سیستم با نقش VC → منوی «شرکت‌ها» →
+          دکمه «افزودن استارتاپ» → ایمیل شما را به‌عنوان بنیان‌گذار وارد
+          کند تا اتصال خودکار انجام شود.
+        </div>
       </div>
     );
   }

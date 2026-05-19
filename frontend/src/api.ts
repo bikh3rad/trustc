@@ -104,6 +104,10 @@ export const Auth = {
     }),
   logout: () => call<void>(`/v1/auth/logout`, { method: "POST" }),
   me: () => call<{ user: AuthUser }>(`/v1/auth/me`),
+  // MVP demo helper: public roster used by the login screen to show every
+  // account + the shared demo password (`demo1234`).
+  demoUsers: () =>
+    call<{ users: AuthUser[] }>(`/v1/auth/demo-users`, { skipAuth: true }),
 };
 
 /* ---------------- Admin ---------------- */
@@ -131,6 +135,19 @@ export const Admin = {
     call<{ user: AuthUser }>(`/v1/admin/users/${id}/disable`, { method: "POST" }),
   enableUser: (id: string) =>
     call<{ user: AuthUser }>(`/v1/admin/users/${id}/enable`, { method: "POST" }),
+  setPassword: (id: string, password: string) =>
+    call<{ user: AuthUser }>(`/v1/admin/users/${id}/password`, {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    }),
+  // Link (or clear) the startup a founder belongs to. Pass startup_id = ""
+  // to unlink. Used by the "اتصال بنیان‌گذار به استارتاپ" flow on the VC
+  // and admin panels.
+  linkUserStartup: (id: string, startup_id: string) =>
+    call<{ user: AuthUser }>(`/v1/admin/users/${id}/startup`, {
+      method: "POST",
+      body: JSON.stringify({ startup_id }),
+    }),
   getSettings: () => call<SystemSettings>(`/v1/admin/settings`),
   patchSettings: (patch: Partial<SystemSettings>) =>
     call<SystemSettings>(`/v1/admin/settings`, {
@@ -154,12 +171,70 @@ export type Startup = {
   risk_level: string;
 };
 
+export type VC = {
+  id: string;
+  name: string;
+  aum_cents: number;
+};
+
+// CreateStartupInput mirrors PRD §8.1 (startup registration form) + founder
+// contact + bank fields the startup service accepts in one POST.
+export type CreateStartupInput = {
+  vc_id?: string;
+  startup_name: string;
+  legal_name: string;
+  industry: string;
+  country: string;
+  tax_id: string;
+  credit_score?: number;
+  burn_rate_cents?: number;
+  risk_level?: string;
+  founder: {
+    founder_name: string;
+    email: string;
+    phone?: string;
+  };
+  bank?: {
+    bank_account: string;
+    bank_name?: string;
+  };
+};
+
+// CreateStartupResult adds the auto-linked founder, if the email matched.
+export type CreateStartupResult = Startup & {
+  linked_founder?: {
+    id: string;
+    email: string;
+    name: string;
+    role: Role;
+    status: AccountStatus;
+    startup_id?: string;
+  };
+};
+
+export type UnlinkedFounder = {
+  id: string;
+  email: string;
+  name: string;
+  role: Role;
+  status: AccountStatus;
+  company?: string;
+};
+
 export const Startups = {
   list: (vc_id?: string) =>
     call<{ startups: Startup[] }>(`/v1/startups${vc_id ? `?vc_id=${vc_id}` : ""}`),
   get: (id: string) => call<Startup>(`/v1/startups/${id}`),
-  create: (body: object) =>
-    call<Startup>(`/v1/startups`, { method: "POST", body: JSON.stringify(body) }),
+  create: (body: CreateStartupInput) =>
+    call<CreateStartupResult>(`/v1/startups`, { method: "POST", body: JSON.stringify(body) }),
+  linkFounder: (startup_id: string, target: { user_id?: string; email?: string }) =>
+    call<{ user: AuthUser }>(`/v1/startups/${startup_id}/link-founder`, {
+      method: "POST",
+      body: JSON.stringify(target),
+    }),
+  unlinkedFounders: () =>
+    call<{ founders: UnlinkedFounder[] }>(`/v1/founders/unlinked`),
+  listVCs: () => call<{ vcs: VC[] }>(`/v1/vcs`),
 };
 
 /* ---------------- Procurements ---------------- */
@@ -186,9 +261,10 @@ export type WorkflowTransition = {
 };
 
 export const Procurements = {
-  list: (startup_id?: string) => {
+  list: (startup_id?: string, state?: string) => {
     const q = new URLSearchParams();
     if (startup_id) q.set("startup_id", startup_id);
+    if (state) q.set("state", state);
     return call<{ procurements: Procurement[] }>(
       `/v1/procurements${q.size ? `?${q.toString()}` : ""}`,
     );
@@ -236,9 +312,10 @@ export type LedgerEntry = {
 };
 
 export const Ledger = {
-  list: (params: { workflow_reference_id?: string } = {}) => {
+  list: (params: { workflow_reference_id?: string; startup_id?: string } = {}) => {
     const q = new URLSearchParams();
     if (params.workflow_reference_id) q.set("workflow_reference_id", params.workflow_reference_id);
+    if (params.startup_id) q.set("startup_id", params.startup_id);
     return call<{ entries: LedgerEntry[] }>(
       `/v1/ledger/entries${q.size ? `?${q.toString()}` : ""}`,
     );
@@ -267,7 +344,7 @@ export type AuditRecord = {
 };
 
 export const Audit = {
-  list: (filter: { subject_type?: string; subject_id?: string; event_type?: string; limit?: number } = {}) => {
+  list: (filter: { subject_type?: string; subject_id?: string; event_type?: string; startup_id?: string; limit?: number } = {}) => {
     const q = new URLSearchParams();
     Object.entries(filter).forEach(([k, v]) => {
       if (v !== undefined && v !== "") q.set(k, String(v));

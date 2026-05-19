@@ -41,16 +41,23 @@ export function CurrentStartupProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       const r = await Startups.list();
-      setStartups(r.startups);
-      // Founder: pin to their own startup_id when present, regardless of
-      // any stale value in localStorage.
-      if (user?.role === "FOUNDER" && user.startup_id) {
-        if (r.startups.some((s) => s.id === user.startup_id)) {
-          setCurrentIdState(user.startup_id);
-          return;
+      // FOUNDER: hard-isolated to their own startup. A founder with no
+      // startup_id (e.g. self-registered, awaiting admin to link a
+      // company) sees an empty list and the dashboard's empty state —
+      // they MUST NOT inherit any other startup via localStorage fallback.
+      if (user?.role === "FOUNDER") {
+        const own = user.startup_id
+          ? r.startups.filter((s) => s.id === user.startup_id)
+          : [];
+        setStartups(own);
+        setCurrentIdState(own.length ? own[0].id : null);
+        if (typeof window !== "undefined" && own.length === 0) {
+          localStorage.removeItem(STORAGE_KEY);
         }
+        return;
       }
-      // Admin / VC / Auditor: keep current pick if still valid, else st_001.
+      setStartups(r.startups);
+      // Admin / VC / Auditor: keep current pick if still valid, else first.
       if (!currentId && r.startups.length) {
         setCurrentIdState(r.startups[0].id);
       } else if (currentId && !r.startups.some((s) => s.id === currentId) && r.startups.length) {

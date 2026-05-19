@@ -9,6 +9,7 @@ import (
 	"github.com/trustc/trustc/services/shared/auditemit"
 	"github.com/trustc/trustc/services/shared/events"
 	"github.com/trustc/trustc/services/shared/httpx"
+	"github.com/trustc/trustc/services/shared/logx"
 
 	"github.com/trustc/trustc/services/ledger/internal/domain"
 	"github.com/trustc/trustc/services/ledger/internal/store"
@@ -57,7 +58,19 @@ func (h *Handler) postEntry(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) listEntries(w http.ResponseWriter, r *http.Request) {
 	workflow := r.URL.Query().Get("workflow_reference_id")
-	entries, err := h.store.List(r.Context(), workflow, 100)
+	startupID := r.URL.Query().Get("startup_id")
+
+	// RBAC scope: FOUNDER may only see entries tied to their own startup.
+	// The gateway stamps X-Trustc-Startup from the JWT; we force the filter
+	// to that value regardless of caller-supplied params so a founder can
+	// never see a peer company's ledger.
+	if logx.ActorRole(r.Context()) == "FOUNDER" {
+		if scope := logx.ActorStartupID(r.Context()); scope != "" {
+			startupID = scope
+		}
+	}
+
+	entries, err := h.store.List(r.Context(), workflow, startupID, 100)
 	if err != nil {
 		httpx.Error(w, err)
 		return

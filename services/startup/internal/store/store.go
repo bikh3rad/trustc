@@ -146,6 +146,59 @@ func (s *Store) List(ctx context.Context, vcID string) ([]Startup, error) {
 	return out, rows.Err()
 }
 
+type VC struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	AUMCents int64  `json:"aum_cents"`
+}
+
+// ListVCs returns every VC fund. MVP has exactly one ("trustC Ventures").
+func (s *Store) ListVCs(ctx context.Context) ([]VC, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT id, name, COALESCE(aum_cents, 0)
+		FROM startup.vcs
+		ORDER BY name
+		LIMIT 100
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("startup: list vcs: %w", err)
+	}
+	defer rows.Close()
+	out := []VC{}
+	for rows.Next() {
+		var v VC
+		if err := rows.Scan(&v.ID, &v.Name, &v.AUMCents); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+// DefaultVCID returns the ID of the only VC in the system. Used when a VC
+// user creates a startup without specifying vc_id — MVP is single-VC per
+// CLAUDE.md §13. Returns an error if 0 or >1 VCs are configured.
+func (s *Store) DefaultVCID(ctx context.Context) (string, error) {
+	var id string
+	var count int
+	err := s.db.QueryRow(ctx, `
+		SELECT (SELECT id::text FROM startup.vcs ORDER BY name LIMIT 1),
+		       (SELECT COUNT(*) FROM startup.vcs)
+	`).Scan(&id, &count)
+	if err != nil {
+		return "", fmt.Errorf("startup: default vc: %w", err)
+	}
+	if count == 0 {
+		return "", sharederrs.New(sharederrs.KindNotFound, "NO_VC",
+			"no VC configured; seed startup.vcs first")
+	}
+	if count > 1 {
+		return "", sharederrs.New(sharederrs.KindBadRequest, "AMBIGUOUS_VC",
+			"multiple VCs configured; vc_id must be specified explicitly")
+	}
+	return id, nil
+}
+
 func (s *Store) SetStatus(ctx context.Context, id, status string) error {
 	tag, err := s.db.Exec(ctx, `
 		UPDATE startup.startups SET status = $2, updated_at = NOW() WHERE id = $1

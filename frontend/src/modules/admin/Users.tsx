@@ -7,9 +7,11 @@ import { useEffect, useState } from "react";
 import {
   Admin,
   ApiHttpError,
+  Startups as StartupsApi,
   type AccountStatus,
   type AuthUser,
   type Role,
+  type Startup,
 } from "../../api";
 import { Btn } from "../../components/ui/Btn";
 import { Icon } from "../../components/ui/Icon";
@@ -24,6 +26,8 @@ import { useIsMobile } from "../../lib/useIsMobile";
 type Filter = "ALL" | AccountStatus | Role;
 type PendingAction = "approve" | "reject" | "disable" | "enable";
 type Confirm = { action: PendingAction; user: AuthUser } | null;
+type PasswordTarget = { user: AuthUser } | null;
+type StartupTarget = { user: AuthUser } | null;
 
 const FILTERS: Array<[Filter, string]> = [
   ["ALL", "همه"],
@@ -54,6 +58,12 @@ export function AdminUsers() {
   const [users, setUsers] = useState<AuthUser[] | null>(null);
   const [filter, setFilter] = useState<Filter>("ALL");
   const [confirming, setConfirming] = useState<Confirm>(null);
+  const [passwordTarget, setPasswordTarget] = useState<PasswordTarget>(null);
+  const [pwForm, setPwForm] = useState<string>("demo1234");
+  const [pwError, setPwError] = useState<string | null>(null);
+  const [startupTarget, setStartupTarget] = useState<StartupTarget>(null);
+  const [startupChoiceId, setStartupChoiceId] = useState<string>("");
+  const [allStartups, setAllStartups] = useState<Startup[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
@@ -69,7 +79,81 @@ export function AdminUsers() {
   }
   useEffect(() => {
     void load();
+    // Pre-fetch the startup roster so the "link to startup" action can
+    // open instantly with the dropdown populated. Failures are non-fatal
+    // (the modal just shows an empty list with a hint).
+    StartupsApi.list()
+      .then((r) => setAllStartups(r.startups))
+      .catch(() => setAllStartups([]));
   }, []);
+
+  function openStartupModal(u: AuthUser) {
+    setStartupTarget({ user: u });
+    setStartupChoiceId(u.startup_id || allStartups[0]?.id || "");
+  }
+
+  async function applyStartup() {
+    if (!startupTarget) return;
+    if (!startupChoiceId) return;
+    setBusyId(startupTarget.user.id);
+    try {
+      const r = await Admin.linkUserStartup(
+        startupTarget.user.id,
+        startupChoiceId,
+      );
+      setUsers((list) =>
+        list ? list.map((u) => (u.id === r.user.id ? r.user : u)) : list,
+      );
+      toast({
+        tone: "good",
+        msg: `${startupTarget.user.name} به استارتاپ متصل شد`,
+      });
+      setStartupTarget(null);
+    } catch (e) {
+      const msg =
+        e instanceof ApiHttpError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : "خطا در اتصال";
+      toast({ tone: "bad", msg });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function openPasswordModal(u: AuthUser) {
+    setPwForm("demo1234");
+    setPwError(null);
+    setPasswordTarget({ user: u });
+  }
+
+  async function applyPassword() {
+    if (!passwordTarget) return;
+    if (pwForm.length < 6) {
+      setPwError("رمز عبور حداقل ۶ نویسه");
+      return;
+    }
+    setBusyId(passwordTarget.user.id);
+    try {
+      await Admin.setPassword(passwordTarget.user.id, pwForm);
+      toast({
+        tone: "good",
+        msg: `رمز عبور ${passwordTarget.user.name} به‌روز شد`,
+      });
+      setPasswordTarget(null);
+    } catch (e) {
+      const msg =
+        e instanceof ApiHttpError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : "خطا در تنظیم رمز";
+      setPwError(msg);
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   async function apply(c: Exclude<Confirm, null>) {
     setBusyId(c.user.id);
@@ -253,6 +337,14 @@ export function AdminUsers() {
                         فعال‌سازی
                       </Btn>
                     )}
+                    <Btn
+                      variant="ghost"
+                      size="sm"
+                      disabled={busyId === u.id}
+                      onClick={() => openPasswordModal(u)}
+                    >
+                      رمز
+                    </Btn>
                   </div>
                 </div>
               }
@@ -344,6 +436,24 @@ export function AdminUsers() {
                         فعال‌سازی
                       </Btn>
                     )}
+                    {u.role === "FOUNDER" && (
+                      <Btn
+                        variant="ghost"
+                        size="sm"
+                        disabled={busyId === u.id}
+                        onClick={() => openStartupModal(u)}
+                      >
+                        {u.startup_id ? "تغییر استارتاپ" : "اتصال به استارتاپ"}
+                      </Btn>
+                    )}
+                    <Btn
+                      variant="ghost"
+                      size="sm"
+                      disabled={busyId === u.id}
+                      onClick={() => openPasswordModal(u)}
+                    >
+                      تنظیم رمز
+                    </Btn>
                   </div>
                 </td>
               </tr>
@@ -362,6 +472,125 @@ export function AdminUsers() {
         </table>
       </div>
       )}
+
+      <Modal
+        open={!!passwordTarget}
+        onClose={() => setPasswordTarget(null)}
+        title="تنظیم رمز عبور"
+        footer={
+          passwordTarget && (
+            <>
+              <Btn variant="ghost" onClick={() => setPasswordTarget(null)}>
+                انصراف
+              </Btn>
+              <Btn
+                variant="primary"
+                disabled={busyId === passwordTarget.user.id}
+                onClick={() => void applyPassword()}
+              >
+                ذخیره رمز جدید
+              </Btn>
+            </>
+          )
+        }
+      >
+        {passwordTarget && (
+          <div className="stack" style={{ gap: 12 }}>
+            <p style={{ marginBottom: 0 }}>
+              تنظیم رمز جدید برای کاربر <b>{passwordTarget.user.name}</b>{" "}
+              <span className="mono muted" style={{ fontSize: 12 }}>
+                ({passwordTarget.user.email})
+              </span>
+              :
+            </p>
+            <div className="field">
+              <label className="field-label">رمز عبور جدید</label>
+              <input
+                className="input"
+                type="text"
+                value={pwForm}
+                onChange={(e) => {
+                  setPwForm(e.target.value);
+                  setPwError(null);
+                }}
+                autoFocus
+                aria-invalid={!!pwError}
+              />
+              {pwError && <div className="field-error">{pwError}</div>}
+              <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                حداقل ۶ نویسه. رمز پیش‌فرض دموی پلتفرم{" "}
+                <span className="mono">demo1234</span> است.
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={!!startupTarget}
+        onClose={() => setStartupTarget(null)}
+        title={
+          startupTarget?.user.startup_id
+            ? "تغییر استارتاپ بنیان‌گذار"
+            : "اتصال بنیان‌گذار به استارتاپ"
+        }
+        footer={
+          startupTarget && (
+            <>
+              <Btn variant="ghost" onClick={() => setStartupTarget(null)}>
+                انصراف
+              </Btn>
+              <Btn
+                variant="primary"
+                disabled={busyId === startupTarget.user.id || !startupChoiceId}
+                onClick={() => void applyStartup()}
+              >
+                ذخیره اتصال
+              </Btn>
+            </>
+          )
+        }
+      >
+        {startupTarget && (
+          <div className="stack" style={{ gap: 12 }}>
+            <p style={{ marginBottom: 0 }}>
+              کاربر <b>{startupTarget.user.name}</b>{" "}
+              <span className="mono muted" style={{ fontSize: 12 }}>
+                ({startupTarget.user.email})
+              </span>{" "}
+              به کدام استارتاپ متصل شود؟
+            </p>
+            {allStartups.length === 0 ? (
+              <div
+                className="card"
+                style={{
+                  background: "var(--state-warn-bg)",
+                  borderColor: "var(--state-warn)",
+                  padding: 12,
+                }}
+              >
+                هنوز هیچ استارتاپی در سیستم ثبت نشده. ابتدا از پنل سرمایه‌گذار،
+                منوی «شرکت‌ها»، یک استارتاپ اضافه کنید.
+              </div>
+            ) : (
+              <div className="field">
+                <label className="field-label">استارتاپ مقصد</label>
+                <select
+                  className="input"
+                  value={startupChoiceId}
+                  onChange={(e) => setStartupChoiceId(e.target.value)}
+                >
+                  {allStartups.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.startup_name} ({s.id.slice(0, 8)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
 
       <Modal
         open={!!confirming}

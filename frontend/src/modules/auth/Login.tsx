@@ -2,7 +2,7 @@
 // Calls AuthContext.login(); shows server-side errors (e.g. ACCOUNT_PENDING,
 // INVALID_CREDENTIALS) inline on the email field as the prototype does.
 import { useEffect, useState } from "react";
-import { Auth, ApiHttpError } from "../../api";
+import { Auth, ApiHttpError, type AuthUser, type Role } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 import { AuthLayout } from "./AuthLayout";
 
@@ -13,15 +13,25 @@ type Props = {
 type FormState = { email: string; password: string };
 type ErrorState = Partial<Record<keyof FormState, string>>;
 
+const DEMO_PASSWORD = "demo1234";
+
+const ROLE_TONE: Record<Role, "good" | "active" | "warn" | "bad"> = {
+  FOUNDER: "good",
+  VC: "active",
+  AUDITOR: "warn",
+  ADMIN: "bad",
+};
+
 export function Login({ onGoRegister }: Props) {
   // Defaults match the prototype so demo flows still work in one click.
   const [form, setForm] = useState<FormState>({
-    email: "founder@alpha.io",
-    password: "demo1234",
+    email: "admin@trustc.io",
+    password: DEMO_PASSWORD,
   });
   const [errors, setErrors] = useState<ErrorState>({});
   const [submitting, setSubmitting] = useState(false);
   const [registrationEnabled, setRegistrationEnabled] = useState<boolean>(true);
+  const [demoUsers, setDemoUsers] = useState<AuthUser[] | null>(null);
   const { login } = useAuth();
 
   // We don't render the "ثبت‌نام" link if registration is disabled, so the
@@ -30,6 +40,9 @@ export function Login({ onGoRegister }: Props) {
     Auth.registrationStatus()
       .then((s) => setRegistrationEnabled(s.enabled))
       .catch(() => setRegistrationEnabled(true));
+    Auth.demoUsers()
+      .then((r) => setDemoUsers(r.users))
+      .catch(() => setDemoUsers([]));
   }, []);
 
   async function submit(e: React.FormEvent) {
@@ -59,6 +72,17 @@ export function Login({ onGoRegister }: Props) {
       setSubmitting(false);
     }
   }
+
+  // Group by role so the long demo roster reads cleanly in RTL.
+  const grouped: Record<Role, AuthUser[]> = {
+    ADMIN: [],
+    VC: [],
+    AUDITOR: [],
+    FOUNDER: [],
+  };
+  (demoUsers ?? []).forEach((u) => {
+    if (grouped[u.role]) grouped[u.role].push(u);
+  });
 
   return (
     <AuthLayout tagline="trustC نقدینگی پراکنده پورتفوی شما را به سرمایه‌ای در گردش، قابل‌اهرم‌گیری و قابل‌حسابرسی تبدیل می‌کند.">
@@ -133,35 +157,137 @@ export function Login({ onGoRegister }: Props) {
         <div className="eyebrow" style={{ marginBottom: 8 }}>
           حساب‌های دموی این پروتوتایپ
         </div>
-        <div className="stack" style={{ gap: 6, fontSize: 12 }}>
-          <DemoRow email="founder@alpha.io" role="FOUNDER" tone="good" />
-          <DemoRow email="vc@trustc.io" role="VC" tone="active" />
-          <DemoRow email="auditor@trustc.io" role="AUDITOR" tone="warn" />
-          <DemoRow email="admin@trustc.io" role="ADMIN" tone="bad" />
-          <div className="muted faint" style={{ marginTop: 8 }}>
-            رمز عبور همه: <span className="mono">demo1234</span>
+        <div
+          className="muted"
+          style={{ fontSize: 12, marginBottom: 10 }}
+        >
+          رمز عبور همه حساب‌ها:{" "}
+          <b className="mono" style={{ color: "var(--fg-default)" }}>
+            {DEMO_PASSWORD}
+          </b>
+          {" "}— برای ورود سریع روی نام هر حساب کلیک کنید.
+        </div>
+
+        {demoUsers === null && (
+          <div className="muted" style={{ fontSize: 12 }}>
+            در حال بارگذاری فهرست حساب‌ها…
           </div>
+        )}
+        {demoUsers !== null && demoUsers.length === 0 && (
+          <div className="muted" style={{ fontSize: 12 }}>
+            هیچ حسابی پیدا نشد.
+          </div>
+        )}
+
+        <div
+          className="stack"
+          style={{ gap: 10, fontSize: 12, maxHeight: 320, overflow: "auto" }}
+        >
+          {(["ADMIN", "VC", "AUDITOR", "FOUNDER"] as Role[]).map((role) => {
+            const list = grouped[role];
+            if (!list.length) return null;
+            return (
+              <div key={role} className="stack" style={{ gap: 4 }}>
+                <div
+                  className="eyebrow"
+                  style={{ fontSize: 10, color: "var(--fg-muted)" }}
+                >
+                  {labelForRole(role)} ({list.length})
+                </div>
+                {list.map((u) => (
+                  <DemoRow
+                    key={u.id}
+                    user={u}
+                    tone={ROLE_TONE[u.role]}
+                    onPick={() =>
+                      setForm({ email: u.email, password: DEMO_PASSWORD })
+                    }
+                  />
+                ))}
+              </div>
+            );
+          })}
         </div>
       </div>
     </AuthLayout>
   );
 }
 
+function labelForRole(r: Role): string {
+  switch (r) {
+    case "ADMIN":
+      return "ادمین";
+    case "VC":
+      return "سرمایه‌گذار";
+    case "AUDITOR":
+      return "ممیز";
+    case "FOUNDER":
+      return "بنیان‌گذار";
+  }
+}
+
 function DemoRow({
-  email,
-  role,
+  user,
   tone,
+  onPick,
 }: {
-  email: string;
-  role: string;
+  user: AuthUser;
   tone: "good" | "active" | "warn" | "bad";
+  onPick: () => void;
 }) {
   return (
-    <div className="row" style={{ justifyContent: "space-between" }}>
-      <span className="mono muted">{email}</span>
-      <span className="chip" data-tone={tone}>
-        <span className="mono">{role}</span>
-      </span>
-    </div>
+    <button
+      type="button"
+      onClick={onPick}
+      className="row"
+      style={{
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 8,
+        padding: "6px 8px",
+        border: "1px solid var(--border-hairline)",
+        borderRadius: 6,
+        background: "transparent",
+        cursor: "pointer",
+        textAlign: "inherit",
+        width: "100%",
+      }}
+      title="کلیک: پر کردن فرم ورود"
+    >
+      <div style={{ minWidth: 0 }}>
+        <div
+          className="mono"
+          style={{
+            fontSize: 12,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {user.email}
+        </div>
+        {user.company && (
+          <div
+            className="muted"
+            style={{ fontSize: 11, marginTop: 2 }}
+          >
+            {user.company}
+          </div>
+        )}
+      </div>
+      <div className="row" style={{ gap: 4, flexShrink: 0 }}>
+        {user.status !== "ACTIVE" && (
+          <span
+            className="chip"
+            data-tone={user.status === "PENDING" ? "warn" : "bad"}
+          >
+            <span className="mono">{user.status}</span>
+          </span>
+        )}
+        <span className="chip" data-tone={tone}>
+          <span className="mono">{user.role}</span>
+        </span>
+      </div>
+    </button>
   );
 }

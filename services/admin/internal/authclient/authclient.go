@@ -93,6 +93,66 @@ func (c *Client) GetUser(ctx context.Context, id string) (*User, error) {
 	return &body.User, nil
 }
 
+// SetPassword forwards a plaintext password to the auth service, which
+// hashes and stores it. Used by the admin "set password" flow.
+func (c *Client) SetPassword(ctx context.Context, id, password string) (*User, error) {
+	payload, _ := json.Marshal(map[string]string{"password": password})
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost,
+		c.baseURL+"/internal/users/"+id+"/password", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, errs.Wrap(errs.KindInternal, "AUTH_UNREACHABLE", "auth service unreachable", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errs.New(errs.KindNotFound, "USER_NOT_FOUND", "no such user")
+	}
+	if resp.StatusCode == http.StatusBadRequest {
+		return nil, errs.New(errs.KindBadRequest, "BAD_PASSWORD",
+			"password must be at least 6 characters")
+	}
+	if resp.StatusCode >= 400 {
+		return nil, errs.New(errs.KindInternal, fmt.Sprintf("AUTH_HTTP_%d", resp.StatusCode),
+			"auth rejected password change")
+	}
+	var body struct {
+		User User `json:"user"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, err
+	}
+	return &body.User, nil
+}
+
+// SetStartupID links (or clears) a user's startup_id via the auth service's
+// internal endpoint. Pass startupID == "" to unlink.
+func (c *Client) SetStartupID(ctx context.Context, id, startupID string) (*User, error) {
+	payload, _ := json.Marshal(map[string]string{"startup_id": startupID})
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost,
+		c.baseURL+"/internal/users/"+id+"/startup", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, errs.Wrap(errs.KindInternal, "AUTH_UNREACHABLE", "auth service unreachable", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errs.New(errs.KindNotFound, "USER_NOT_FOUND", "no such user")
+	}
+	if resp.StatusCode >= 400 {
+		return nil, errs.New(errs.KindInternal, fmt.Sprintf("AUTH_HTTP_%d", resp.StatusCode),
+			"auth rejected startup link")
+	}
+	var body struct {
+		User User `json:"user"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, err
+	}
+	return &body.User, nil
+}
+
 func (c *Client) SetStatus(ctx context.Context, id, status string) (*User, error) {
 	payload, _ := json.Marshal(map[string]string{"status": status})
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost,

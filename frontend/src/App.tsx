@@ -15,8 +15,11 @@ import { Escrow } from "./modules/founder/Escrow";
 import { Ledger } from "./modules/founder/Ledger";
 
 import { Portfolio } from "./modules/vc/Portfolio";
+import { Approvals } from "./modules/vc/Approvals";
 import { Recycling } from "./modules/vc/Recycling";
 import { KillSwitch } from "./modules/vc/KillSwitch";
+import { Companies } from "./modules/vc/Companies";
+import { CompanyDetail } from "./modules/vc/CompanyDetail";
 
 import { Audit } from "./modules/auditor/Audit";
 import { Reports } from "./modules/auditor/Reports";
@@ -57,13 +60,19 @@ export function App() {
                 <Route path="/dashboard" element={<RoleGuard allow={[...FOUNDER_ROLES]}><Dashboard /></RoleGuard>} />
                 <Route path="/procurements" element={<RoleGuard allow={[...FOUNDER_ROLES]}><Procurements /></RoleGuard>} />
                 <Route path="/procurements/new" element={<RoleGuard allow={[...FOUNDER_ROLES]}><NewProcurement /></RoleGuard>} />
-                <Route path="/procurements/:id" element={<RoleGuard allow={[...FOUNDER_ROLES]}><ProcurementDetail /></RoleGuard>} />
+                {/* Detail page is shared between founder operations and VC
+                    review — VC needs to inspect a request before approving
+                    it via the Approvals queue. */}
+                <Route path="/procurements/:id" element={<RoleGuard allow={["FOUNDER", "VC", "ADMIN"]}><ProcurementDetail /></RoleGuard>} />
                 <Route path="/invoices" element={<RoleGuard allow={[...FOUNDER_ROLES]}><Invoices /></RoleGuard>} />
                 <Route path="/escrow" element={<RoleGuard allow={[...FOUNDER_ROLES]}><Escrow /></RoleGuard>} />
                 <Route path="/ledger" element={<RoleGuard allow={[...FOUNDER_ROLES]}><Ledger /></RoleGuard>} />
 
                 {/* VC */}
                 <Route path="/vc/portfolio" element={<RoleGuard allow={[...VC_ROLES]}><Portfolio /></RoleGuard>} />
+                <Route path="/vc/approvals" element={<RoleGuard allow={[...VC_ROLES]}><Approvals /></RoleGuard>} />
+                <Route path="/vc/companies" element={<RoleGuard allow={[...VC_ROLES]}><Companies /></RoleGuard>} />
+                <Route path="/vc/companies/:id" element={<RoleGuard allow={[...VC_ROLES]}><CompanyDetail /></RoleGuard>} />
                 <Route path="/vc/recycling" element={<RoleGuard allow={[...VC_ROLES]}><Recycling /></RoleGuard>} />
                 <Route path="/vc/killswitch" element={<RoleGuard allow={[...VC_ROLES]}><KillSwitch /></RoleGuard>} />
 

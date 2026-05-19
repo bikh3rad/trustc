@@ -25,10 +25,12 @@ import (
 
 // Event types emitted by admin actions (CLAUDE.md §5 — domain events).
 const (
-	EvtUserApproved    = "trustc.admin.user_approved"
-	EvtUserDisabled    = "trustc.admin.user_disabled"
-	EvtUserEnabled     = "trustc.admin.user_enabled"
-	EvtSettingsUpdated = "trustc.admin.settings_updated"
+	EvtUserApproved      = "trustc.admin.user_approved"
+	EvtUserDisabled      = "trustc.admin.user_disabled"
+	EvtUserEnabled       = "trustc.admin.user_enabled"
+	EvtUserPasswordReset = "trustc.admin.user_password_reset"
+	EvtUserStartupLinked = "trustc.admin.user_startup_linked"
+	EvtSettingsUpdated   = "trustc.admin.settings_updated"
 )
 
 type Handler struct {
@@ -59,6 +61,8 @@ func (h *Handler) Routes() http.Handler {
 		r.Post("/users/{id}/approve", h.approveUser)
 		r.Post("/users/{id}/disable", h.disableUser)
 		r.Post("/users/{id}/enable", h.enableUser)
+		r.Post("/users/{id}/password", h.setUserPassword)
+		r.Post("/users/{id}/startup", h.setUserStartupID)
 
 		r.Get("/settings", h.getSettings)
 		r.Patch("/settings", h.patchSettings)
@@ -125,6 +129,82 @@ func (h *Handler) disableUser(w http.ResponseWriter, r *http.Request) {
 }
 func (h *Handler) enableUser(w http.ResponseWriter, r *http.Request) {
 	h.setUserStatus(w, r, "ACTIVE", EvtUserEnabled)
+}
+
+type setPasswordRequest struct {
+	Password string `json:"password"`
+}
+
+// setUserPassword lets an ADMIN overwrite the bcrypt hash of an existing
+// account. The plaintext is forwarded to auth (where it is hashed) and is
+// never persisted by admin. The audit event records only that a reset
+// happened — never the password itself.
+func (h *Handler) setUserPassword(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var req setPasswordRequest
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		httpx.Error(w, err)
+		return
+	}
+	if len(req.Password) < 6 {
+		httpx.Error(w, errs.New(errs.KindBadRequest, "BAD_PASSWORD",
+			"password must be at least 6 characters"))
+		return
+	}
+	u, err := h.auth.SetPassword(r.Context(), id, req.Password)
+	if err != nil {
+		httpx.Error(w, err)
+		return
+	}
+	_ = h.emit.Emit(r.Context(), EvtUserPasswordReset, "user", u.ID, map[string]any{
+		"user_id": u.ID,
+		"email":   u.Email,
+		"role":    u.Role,
+	})
+	httpx.JSON(w, http.StatusOK, map[string]any{"user": u})
+}
+
+type setUserStartupRequest struct {
+	StartupID string `json:"startup_id"`
+}
+
+// setUserStartupID links (or clears) a FOUNDER user's startup_id. This is the
+// glue between the auth.users table and the startup.startups table — a founder
+// who self-registers comes in with no startup_id and the dashboard's empty
+// state kicks in until this is called.
+func (h *Handler) setUserStartupID(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var req setUserStartupRequest
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		httpx.Error(w, err)
+		return
+	}
+	req.StartupID = strings.TrimSpace(req.StartupID)
+
+	prior, err := h.auth.GetUser(r.Context(), id)
+	if err != nil {
+		httpx.Error(w, err)
+		return
+	}
+	if prior.Role != "FOUNDER" {
+		httpx.Error(w, errs.New(errs.KindBadRequest, "NOT_A_FOUNDER",
+			"only FOUNDER accounts can be linked to a startup"))
+		return
+	}
+
+	u, err := h.auth.SetStartupID(r.Context(), id, req.StartupID)
+	if err != nil {
+		httpx.Error(w, err)
+		return
+	}
+	_ = h.emit.Emit(r.Context(), EvtUserStartupLinked, "user", u.ID, map[string]any{
+		"user_id":         u.ID,
+		"email":           u.Email,
+		"role":            u.Role,
+		"from_startup_id": prior.StartupID,
+		"to_startup_id":   u.StartupID,
+	})
+	httpx.JSON(w, http.StatusOK, map[string]any{"user": u})
 }
 
 /* ---------------- settings ---------------- */

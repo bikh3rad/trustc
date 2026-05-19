@@ -3,8 +3,10 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   Procurements as ProcurementsApi,
   type Procurement,
+  type Role,
   type WorkflowTransition,
 } from "../../api";
+import { useAuth } from "../../context/AuthContext";
 import { Btn } from "../../components/ui/Btn";
 import { Chip } from "../../components/ui/Chip";
 import { FSM } from "../../components/ui/FSM";
@@ -21,8 +23,21 @@ import {
   stateLabelFa,
   toFaDigits,
 } from "../../lib/format";
-import { NEXT_STATES, PROCUREMENT_STATES, STAMP_LABEL } from "../../lib/fsm";
+import {
+  NEXT_STATES,
+  PROCUREMENT_STATES,
+  STAMP_LABEL,
+  awaitingRole,
+  canTransition,
+} from "../../lib/fsm";
 import { useIsMobile } from "../../lib/useIsMobile";
+
+const ROLE_LABEL_FA: Record<Role, string> = {
+  ADMIN: "ادمین",
+  FOUNDER: "بنیان‌گذار",
+  VC: "سرمایه‌گذار (VC)",
+  AUDITOR: "ممیز",
+};
 
 function FieldRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
@@ -43,6 +58,7 @@ export function ProcurementDetail() {
   const { toast } = useToast();
   const { isFrozen } = useFrozen();
   const { current } = useCurrentStartup();
+  const { user } = useAuth();
   const isMobile = useIsMobile();
 
   const [proc, setProc] = useState<Procurement | null>(null);
@@ -83,6 +99,16 @@ export function ProcurementDetail() {
   const next = NEXT_STATES[proc.state] ?? [];
   const advance = next.find((s) => s !== "CANCELLED");
   const ci = stateIndex(proc.state);
+
+  // Role gates — these mirror services/procurement/internal/fsm/fsm.go
+  // exactly. We compute them locally so the button only renders for
+  // callers who are actually authorized to advance; the backend still
+  // enforces the same rule and will 403 anyone who tries to bypass.
+  const canAdvance = advance ? canTransition(user?.role, proc.state, advance) : false;
+  const canCancel = next.includes("CANCELLED")
+    ? canTransition(user?.role, proc.state, "CANCELLED")
+    : false;
+  const waitingOn = !canAdvance ? awaitingRole(proc.state) : null;
 
   async function transition(to: string) {
     if (!id) return;
@@ -130,7 +156,7 @@ export function ProcurementDetail() {
           </div>
         </div>
         <div className="row wrap proc-detail-actions" style={{ gap: 12 }}>
-          {advance ? (
+          {advance && canAdvance ? (
             <Btn
               variant="primary"
               icon={<Icon.stamp />}
@@ -139,12 +165,21 @@ export function ProcurementDetail() {
             >
               پیشروی به: {stateLabelFa(advance)}
             </Btn>
-          ) : (
+          ) : !advance ? (
             <Btn variant="ghost" disabled>
               وضعیت پایانی
             </Btn>
-          )}
-          {next.includes("CANCELLED") && (
+          ) : waitingOn ? (
+            <div
+              className="chip"
+              data-tone="warn"
+              title={`این مرحله توسط ${ROLE_LABEL_FA[waitingOn]} انجام می‌شود — از پنل خودش اقدام کند.`}
+              style={{ padding: "8px 12px", fontSize: 13 }}
+            >
+              در انتظار تأیید {ROLE_LABEL_FA[waitingOn]}
+            </div>
+          ) : null}
+          {next.includes("CANCELLED") && canCancel && (
             <Btn
               variant="danger"
               disabled={busy || startupFrozen}

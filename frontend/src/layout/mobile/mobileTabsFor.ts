@@ -21,7 +21,8 @@ const FOUNDER: MobileTab[] = [
 
 const VC: MobileTab[] = [
   { path: "/vc/portfolio",  label: "پورتفو",  icon: "portfolio" },
-  { path: "/vc/recycling",  label: "بازیافت", icon: "recycle" },
+  { path: "/vc/approvals",  label: "تأییدها", icon: "package" },
+  { path: "/vc/companies",  label: "شرکت‌ها", icon: "users" },
   { path: "/vc/killswitch", label: "Kill",    icon: "freeze" },
 ];
 

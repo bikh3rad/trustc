@@ -117,6 +117,7 @@ func main() {
 			r.Post("/auth/register", authProxy.ServeHTTP)
 			r.Post("/auth/login", authProxy.ServeHTTP)
 			r.Get("/auth/registration-status", authProxy.ServeHTTP)
+			r.Get("/auth/demo-users", authProxy.ServeHTTP)
 		})
 
 		r.Group(func(r chi.Router) {
@@ -130,8 +131,22 @@ func main() {
 			r.With(httpx.RequireRoles("ADMIN")).
 				Mount("/admin", proxy.Reverse(adminURL, "/v1"))
 
-			// Startups — readable by VC/ADMIN, writable by ADMIN.
-			r.Mount("/startups", proxy.Reverse(startupURL, "/v1"))
+			// Startups — readable by everyone authenticated, writable by VC/ADMIN
+			// (a VC creates new portfolio companies; ADMIN can do anything).
+			// POST /startups/{id}/link-founder rides along on the same prefix.
+			r.With(httpx.RequireWriteRoles("VC", "ADMIN")).
+				Mount("/startups", proxy.Reverse(startupURL, "/v1"))
+
+			// Founders helper endpoints (currently just /founders/unlinked) —
+			// VC + ADMIN read-only. Returns the list of FOUNDER auth users
+			// with no startup_id, so the "اتصال بنیان‌گذار" panel can show
+			// them as candidates.
+			r.With(httpx.RequireRoles("VC", "ADMIN")).
+				Mount("/founders", proxy.Reverse(startupURL, "/v1"))
+
+			// VC fund roster — read-only, used by the "add startup" form to
+			// preselect the fund. Single-VC MVP returns one row.
+			r.Mount("/vcs", proxy.Reverse(startupURL, "/v1"))
 
 			// Procurement: AUDITOR read-only; FOUNDER scope is enforced in
 			// the procurement store via the X-Trustc-Startup header.

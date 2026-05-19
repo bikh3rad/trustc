@@ -144,18 +144,30 @@ type EntrySummary struct {
 	TotalCents          int64     `json:"total_cents"`
 }
 
-func (s *Store) List(ctx context.Context, workflowRef string, limit int) ([]EntrySummary, error) {
+func (s *Store) List(ctx context.Context, workflowRef, startupID string, limit int) ([]EntrySummary, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
+	// When startup_id is supplied we restrict to ledger entries whose
+	// workflow_reference_id points at a procurement owned by that startup
+	// OR is the per-startup topup marker the escrow service emits
+	// ("topup:<startup-uuid>"). Cross-schema join is safe because both
+	// services share the same Postgres database.
 	rows, err := s.db.Query(ctx, `
-		SELECT id, transaction_id, COALESCE(workflow_reference_id,''),
-		       COALESCE(description,''), posted_at, total_debits_cents
-		FROM ledger.journal_entries
-		WHERE ($1 = '' OR workflow_reference_id = $1)
-		ORDER BY posted_at DESC
-		LIMIT $2
-	`, workflowRef, limit)
+		SELECT le.id, le.transaction_id, COALESCE(le.workflow_reference_id,''),
+		       COALESCE(le.description,''), le.posted_at, le.total_debits_cents
+		FROM ledger.journal_entries le
+		LEFT JOIN procurement.procurement_requests pr
+		  ON pr.id::text = le.workflow_reference_id
+		WHERE ($1 = '' OR le.workflow_reference_id = $1)
+		  AND (
+		    $2 = ''
+		    OR pr.startup_id::text = $2
+		    OR le.workflow_reference_id = 'topup:' || $2
+		  )
+		ORDER BY le.posted_at DESC
+		LIMIT $3
+	`, workflowRef, startupID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("ledger: list: %w", err)
 	}

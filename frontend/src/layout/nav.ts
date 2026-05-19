@@ -16,6 +16,8 @@ export const NAV_FOUNDER: NavEntry[] = [
 
 export const NAV_VC: NavEntry[] = [
   { path: "/vc/portfolio",  label: "پورتفولیو",         icon: "portfolio" },
+  { path: "/vc/approvals",  label: "تأیید خریدها",       icon: "package" },
+  { path: "/vc/companies",  label: "شرکت‌ها",            icon: "users" },
   { path: "/vc/recycling",  label: "بازیافت سرمایه",    icon: "recycle" },
   { path: "/vc/killswitch", label: "تعلیق (Kill Switch)", icon: "freeze" },
 ];

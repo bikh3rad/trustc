@@ -141,6 +141,18 @@ func (h *Handler) release(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) account(w http.ResponseWriter, r *http.Request) {
 	startupID := chi.URLParam(r, "startup_id")
+
+	// RBAC scope: a FOUNDER may only read their own escrow account.
+	// VC + ADMIN + AUDITOR roles see whatever URL they ask for.
+	if logx.ActorRole(r.Context()) == "FOUNDER" {
+		scope := logx.ActorStartupID(r.Context())
+		if scope == "" || scope != startupID {
+			httpx.Error(w, errs.New(errs.KindForbidden, "OUT_OF_SCOPE",
+				"founder may only read their own escrow account"))
+			return
+		}
+	}
+
 	a, err := h.store.AccountFor(r.Context(), startupID)
 	if err != nil {
 		httpx.Error(w, err)

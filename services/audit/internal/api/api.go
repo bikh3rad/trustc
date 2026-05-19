@@ -12,6 +12,7 @@ import (
 
 	"github.com/trustc/trustc/services/shared/events"
 	"github.com/trustc/trustc/services/shared/httpx"
+	"github.com/trustc/trustc/services/shared/logx"
 
 	"github.com/trustc/trustc/services/audit/internal/store"
 )
@@ -39,10 +40,22 @@ func (h *Handler) health(w http.ResponseWriter, _ *http.Request) {
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	limit, _ := strconv.Atoi(q.Get("limit"))
+	startupID := q.Get("startup_id")
+
+	// RBAC scope: FOUNDER may only see audit records that trace back to
+	// their own startup. We force the filter from the JWT-stamped header
+	// so a founder cannot widen the scope by tweaking the query string.
+	if logx.ActorRole(r.Context()) == "FOUNDER" {
+		if scope := logx.ActorStartupID(r.Context()); scope != "" {
+			startupID = scope
+		}
+	}
+
 	records, err := h.store.List(r.Context(), store.ListFilter{
 		SubjectType: q.Get("subject_type"),
 		SubjectID:   q.Get("subject_id"),
 		EventType:   q.Get("event_type"),
+		StartupID:   startupID,
 		Limit:       limit,
 	})
 	if err != nil {

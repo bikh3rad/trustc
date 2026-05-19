@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Ledger as LedgerApi, type LedgerEntry } from "../../api";
 import { Stat } from "../../components/ui/Stat";
+import { useCurrentStartup } from "../../context/CurrentStartupContext";
 import { formatIRR, formatIRRPlain, toFaDigits } from "../../lib/format";
 import { useIsMobile } from "../../lib/useIsMobile";
 
@@ -8,14 +9,16 @@ const POLL_MS = 4000;
 
 export function Ledger() {
   const isMobile = useIsMobile();
+  const { current } = useCurrentStartup();
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
   const [freshIds, setFreshIds] = useState<Set<string>>(new Set());
   const [err, setErr] = useState<string | null>(null);
   const knownIds = useRef<Set<string>>(new Set());
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
+    if (!current) return;
     try {
-      const r = await LedgerApi.list();
+      const r = await LedgerApi.list({ startup_id: current.id });
       const incoming = r.entries;
       const newlyAdded = new Set<string>();
       for (const e of incoming) {
@@ -31,13 +34,17 @@ export function Ledger() {
     } catch (e) {
       setErr((e as Error).message);
     }
-  }
+  }, [current]);
 
   useEffect(() => {
+    // Clear the previous startup's entries when the admin switches companies
+    // — otherwise the ledger still flashes the old data until the first poll.
+    setEntries([]);
+    knownIds.current = new Set();
     void refresh();
     const t = window.setInterval(refresh, POLL_MS);
     return () => window.clearInterval(t);
-  }, []);
+  }, [refresh]);
 
   const totalDebit = entries.reduce((s, e) => s + e.total_cents, 0);
   const totalCredit = totalDebit; // ledger invariant: Σ debits = Σ credits per transaction

@@ -144,6 +144,26 @@ func (s *Store) List(ctx context.Context, status, role string) ([]User, error) {
 	return out, rows.Err()
 }
 
+// SetPassword overwrites the bcrypt hash for an existing user. Used by the
+// admin "set password" flow (auth /internal/users/{id}/password proxied from
+// admin /admin/users/{id}/password).
+func (s *Store) SetPassword(ctx context.Context, id, hash string) (*User, error) {
+	row := s.db.QueryRow(ctx, `
+		UPDATE auth.users
+		SET password_hash = $2, updated_at = NOW()
+		WHERE id = $1
+		RETURNING `+selectCols,
+		id, hash)
+	u, err := scan(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, sharederrs.New(sharederrs.KindNotFound, "USER_NOT_FOUND", "no such user")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("auth.store: set password: %w", err)
+	}
+	return u, nil
+}
+
 func (s *Store) SetStatus(ctx context.Context, id, status string) (*User, error) {
 	row := s.db.QueryRow(ctx, `
 		UPDATE auth.users
@@ -157,6 +177,31 @@ func (s *Store) SetStatus(ctx context.Context, id, status string) (*User, error)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("auth.store: set status: %w", err)
+	}
+	return u, nil
+}
+
+// SetStartupID links (or clears, when startupID == "") a user to a startup.
+// Used by the admin/VC "assign founder to company" flow — a founder who
+// self-registers lands without a startup_id and the dashboard's empty state
+// kicks in until this is called.
+func (s *Store) SetStartupID(ctx context.Context, id, startupID string) (*User, error) {
+	var arg any
+	if startupID != "" {
+		arg = startupID
+	}
+	row := s.db.QueryRow(ctx, `
+		UPDATE auth.users
+		SET startup_id = $2, updated_at = NOW()
+		WHERE id = $1
+		RETURNING `+selectCols,
+		id, arg)
+	u, err := scan(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, sharederrs.New(sharederrs.KindNotFound, "USER_NOT_FOUND", "no such user")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("auth.store: set startup_id: %w", err)
 	}
 	return u, nil
 }

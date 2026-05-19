@@ -136,6 +136,15 @@ func (h *Handler) transition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Role authorization (CLAUDE.md §6.2). FINANCIAL_VALIDATION → ESCROW_LOCK
+	// is reserved for VC + ADMIN — even a founder with sufficient escrow
+	// balance must wait for VC sign-off before capital is locked.
+	role := logx.ActorRole(r.Context())
+	if err := fsm.RoleCanTransition(role, cur.State, req.To); err != nil {
+		httpx.Error(w, err)
+		return
+	}
+
 	// Freeze enforcement (CLAUDE.md §6, PRD §13): the kill switch is itself
 	// always allowed; cancellation is also always allowed. Every other
 	// transition is gated on the startup not being under a FULL freeze.

@@ -17,6 +17,7 @@ import (
 	"github.com/trustc/trustc/services/shared/pg"
 
 	"github.com/trustc/trustc/services/startup/internal/api"
+	"github.com/trustc/trustc/services/startup/internal/authclient"
 	"github.com/trustc/trustc/services/startup/internal/store"
 )
 
@@ -41,7 +42,7 @@ func main() {
 	}
 	defer bus.Close()
 
-	h := api.New(store.New(db), auditemit.New(bus, serviceName))
+	h := api.New(store.New(db), authclient.New(), auditemit.New(bus, serviceName))
 	root := chi.NewRouter()
 	root.Use(httpx.RequestID)
 	root.Use(httpx.Logger(func(method, path, rid string, status int, dur time.Duration) {

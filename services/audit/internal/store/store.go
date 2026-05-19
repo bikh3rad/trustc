@@ -146,6 +146,7 @@ type ListFilter struct {
 	SubjectType string
 	SubjectID   string
 	EventType   string
+	StartupID   string
 	Limit       int
 }
 
@@ -153,6 +154,12 @@ func (s *Store) List(ctx context.Context, f ListFilter) ([]StoredRecord, error) 
 	if f.Limit <= 0 || f.Limit > 500 {
 		f.Limit = 100
 	}
+	// startup_id scope: an audit record is "in scope" for a startup when
+	// the subject can be traced back to it. We cover three cases:
+	//   - subject_id IS the startup itself (escrow account / freeze events)
+	//   - subject_type='procurement_request' and the procurement belongs
+	//     to this startup
+	//   - subject_type='escrow_lock' or 'escrow_release' linked via lock row
 	rows, err := s.db.Query(ctx, `
 		SELECT event_id,
 		       COALESCE(actor_id::text,''), COALESCE(actor_role,''),
@@ -162,13 +169,23 @@ func (s *Store) List(ctx context.Context, f ListFilter) ([]StoredRecord, error) 
 		       COALESCE(linked_transaction_id,''),
 		       COALESCE(network_ip::text,''), COALESCE(network_user_agent,''),
 		       payload, COALESCE(previous_hash,''), signature, recorded_at, seq
-		FROM audit.audit_logs
+		FROM audit.audit_logs al
 		WHERE ($1 = '' OR subject_type = $1)
 		  AND ($2 = '' OR subject_id   = $2)
 		  AND ($3 = '' OR event_type   = $3)
+		  AND (
+		    $4 = ''
+		    OR subject_id = $4
+		    OR (subject_type = 'procurement_request' AND subject_id IN (
+		          SELECT id::text FROM procurement.procurement_requests WHERE startup_id::text = $4))
+		    OR (subject_type IN ('escrow_lock','escrow_release') AND subject_id IN (
+		          SELECT el.id::text FROM escrow.escrow_locks el
+		          JOIN escrow.escrow_accounts ea ON ea.id = el.account_id
+		          WHERE ea.startup_id::text = $4))
+		  )
 		ORDER BY seq DESC
-		LIMIT $4
-	`, f.SubjectType, f.SubjectID, f.EventType, f.Limit)
+		LIMIT $5
+	`, f.SubjectType, f.SubjectID, f.EventType, f.StartupID, f.Limit)
 	if err != nil {
 		return nil, err
 	}
